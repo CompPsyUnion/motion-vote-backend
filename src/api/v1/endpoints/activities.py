@@ -15,7 +15,7 @@ from src.schemas.activity import (
 router = APIRouter()
 
 
-@router.get("/activities", response_model=PaginatedActivities)
+@router.get("/", response_model=PaginatedActivities)
 async def get_activities(
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -83,7 +83,7 @@ async def get_activities(
     )
 
 
-@router.post("/activities", response_model=ActivityResponse)
+@router.post("/", response_model=ActivityResponse)
 async def create_activity(
     activity_data: ActivityCreate,
     db: Session = Depends(get_db),
@@ -100,7 +100,7 @@ async def create_activity(
     return activity
 
 
-@router.get("/activities/{activity_id}", response_model=ActivityResponse)
+@router.get("/{activity_id}", response_model=ActivityResponse)
 async def get_activity(
     activity_id: str,
     db: Session = Depends(get_db),
@@ -124,7 +124,7 @@ async def get_activity(
     return activity
 
 
-@router.put("/activities/{activity_id}", response_model=ActivityResponse)
+@router.put("/{activity_id}", response_model=ActivityResponse)
 async def update_activity(
     activity_id: str,
     activity_data: ActivityUpdate,
@@ -157,7 +157,7 @@ async def update_activity(
     return activity
 
 
-@router.delete("/activities/{activity_id}")
+@router.delete("/{activity_id}")
 async def delete_activity(
     activity_id: str,
     db: Session = Depends(get_db),
@@ -178,7 +178,7 @@ async def delete_activity(
     return {"message": "Activity deleted successfully"}
 
 
-@router.get("/activities/{activity_id}/collaborators", response_model=List[CollaboratorResponse])
+@router.get("/{activity_id}/collaborators", response_model=List[CollaboratorResponse])
 async def get_collaborators(
     activity_id: str,
     db: Session = Depends(get_db),
@@ -204,7 +204,7 @@ async def get_collaborators(
     return collaborators
 
 
-@router.post("/activities/{activity_id}/collaborators", response_model=CollaboratorResponse)
+@router.post("/{activity_id}/collaborators", response_model=CollaboratorResponse)
 async def invite_collaborator(
     activity_id: str,
     invite_data: CollaboratorInvite,
@@ -246,7 +246,7 @@ async def invite_collaborator(
     return collaborator
 
 
-@router.put("/activities/{activity_id}/collaborators/{collaborator_id}", response_model=CollaboratorResponse)
+@router.put("/{activity_id}/collaborators/{collaborator_id}", response_model=CollaboratorResponse)
 async def update_collaborator(
     activity_id: str,
     collaborator_id: str,
@@ -277,7 +277,7 @@ async def update_collaborator(
     return collaborator
 
 
-@router.delete("/activities/{activity_id}/collaborators/{collaborator_id}")
+@router.delete("/{activity_id}/collaborators/{collaborator_id}")
 async def remove_collaborator(
     activity_id: str,
     collaborator_id: str,

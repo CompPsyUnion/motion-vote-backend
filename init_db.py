@@ -4,10 +4,11 @@
 用于创建所有数据库表
 """
 
-from src.models import *  # 导入所有模型以确保它们被注册
-from src.core.database import Base, engine
 import os
 import sys
+
+from src.core.database import Base, engine
+from src.models import *  # 导入所有模型以确保它们被注册
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

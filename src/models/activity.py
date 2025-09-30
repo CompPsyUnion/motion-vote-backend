@@ -42,7 +42,8 @@ class Activity(Base):
     collaborators = relationship(
         "Collaborator", back_populates="activity", cascade="all, delete-orphan")
     debates = relationship(
-        "Debate", back_populates="activity", cascade="all, delete-orphan")
+        "Debate", back_populates="activity", cascade="all, delete-orphan",
+        foreign_keys="[Debate.activity_id]")
     participants = relationship(
         "Participant", back_populates="activity", cascade="all, delete-orphan")
     current_debate = relationship("Debate", foreign_keys=[current_debate_id])

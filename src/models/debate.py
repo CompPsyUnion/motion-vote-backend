@@ -32,6 +32,7 @@ class Debate(Base):
                         server_default=func.now(), onupdate=func.now())
 
     # 关系
-    activity = relationship("Activity", back_populates="debates")
+    activity = relationship("Activity", back_populates="debates",
+                            foreign_keys=[activity_id])
     votes = relationship("Vote", back_populates="debate",
                          cascade="all, delete-orphan")

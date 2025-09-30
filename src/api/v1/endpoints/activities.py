@@ -122,8 +122,10 @@ async def create_activity(
     current_user: User = Depends(get_current_user)
 ):
     """创建活动"""
+    # 使用by_alias=True来获取数据库字段名(snake_case)
+    activity_dict = activity_data.model_dump(by_alias=True)
     activity = Activity(
-        **activity_data.model_dump(),
+        **activity_dict,
         owner_id=str(current_user.id)
     )
     db.add(activity)
@@ -179,8 +181,8 @@ async def update_activity(
         if not collaborator:
             raise HTTPException(status_code=403, detail="Permission denied")
 
-    # 更新字段
-    update_data = activity_data.model_dump(exclude_unset=True)
+    # 更新字段 - 使用by_alias=True来获取数据库字段名(snake_case)
+    update_data = activity_data.model_dump(exclude_unset=True, by_alias=True)
     for field, value in update_data.items():
         setattr(activity, field, value)
 

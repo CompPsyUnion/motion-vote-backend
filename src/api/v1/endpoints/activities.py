@@ -17,22 +17,42 @@ router = APIRouter()
 
 @router.get("/", response_model=PaginatedActivities)
 async def get_activities(
-    page: int = Query(1, ge=1, description="页码"),
-    limit: int = Query(20, ge=1, le=100, description="每页数量"),
-    status: Optional[ActivityStatus] = Query(None, description="活动状态筛选"),
-    role: Optional[str] = Query(
-        None, description="用户角色筛选", regex="^(owner|collaborator)$"),
-    search: Optional[str] = Query(None, description="搜索关键词"),
+    page: Optional[str] = Query(default=None, description="页码"),
+    limit: Optional[str] = Query(default=None, description="每页数量"),
+    status: Optional[str] = Query(default=None, description="活动状态筛选"),
+    role: Optional[str] = Query(default=None, description="用户角色筛选"),
+    search: Optional[str] = Query(default=None, description="搜索关键词"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """获取活动列表"""
+    # 处理查询参数，提供默认值和类型转换
+    try:
+        page_int = int(page) if page and page.strip() else 1
+        page_int = max(1, page_int)  # 确保页码至少为1
+    except (ValueError, TypeError):
+        page_int = 1
+    
+    try:
+        limit_int = int(limit) if limit and limit.strip() else 20
+        limit_int = max(1, min(100, limit_int))  # 限制在1-100之间
+    except (ValueError, TypeError):
+        limit_int = 20
+    
+    # 处理状态参数
+    status_enum = None
+    if status and status.strip():
+        try:
+            status_enum = ActivityStatus(status.strip().lower())
+        except ValueError:
+            status_enum = None
+    
     query = db.query(Activity)
 
     # 筛选用户相关的活动
-    if role == "owner":
+    if role and role.lower() == "owner":
         query = query.filter(Activity.owner_id == str(current_user.id))
-    elif role == "collaborator":
+    elif role and role.lower() == "collaborator":
         # 获取用户作为协作者的活动ID
         collaborator_activity_ids = db.query(Collaborator.activity_id).filter(
             Collaborator.user_id == str(current_user.id),
@@ -54,22 +74,34 @@ async def get_activities(
         query = query.filter(Activity.id.in_(select(all_ids.c.activity_id)))
 
     # 状态筛选
-    if status:
-        query = query.filter(Activity.status == status)
+    if status_enum:
+        query = query.filter(Activity.status == status_enum)
 
-    # 搜索
-    if search:
-        query = query.filter(
-            or_(
-                Activity.name.ilike(f"%{search}%"),
-                Activity.description.ilike(f"%{search}%"),
-                Activity.location.ilike(f"%{search}%")
+    # 搜索 - 支持多关键词模糊匹配
+    if search and search.strip():
+        search_terms = search.strip().split()
+        search_conditions = []
+        
+        for term in search_terms:
+            term_pattern = f"%{term}%"
+            search_conditions.append(
+                or_(
+                    Activity.name.ilike(term_pattern),
+                    Activity.description.ilike(term_pattern),
+                    Activity.location.ilike(term_pattern)
+                )
             )
-        )
+        
+        # 所有搜索词都要匹配（AND 逻辑）
+        if search_conditions:
+            query = query.filter(and_(*search_conditions))
 
+    # 排序：按创建时间倒序
+    query = query.order_by(Activity.created_at.desc())
+    
     # 分页
     total = query.count()
-    activities = query.offset((page - 1) * limit).limit(limit).all()
+    activities = query.offset((page_int - 1) * limit_int).limit(limit_int).all()
     # Convert ORM objects to schema objects
     activity_responses = [ActivityResponse.model_validate(
         activity) for activity in activities]
@@ -77,9 +109,9 @@ async def get_activities(
     return PaginatedActivities(
         items=activity_responses,
         total=total,
-        page=page,
-        limit=limit,
-        pages=ceil(total / limit)
+        page=page_int,
+        limit=limit_int,
+        pages=ceil(total / limit_int) if limit_int > 0 else 0
     )
 
 

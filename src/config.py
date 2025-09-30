@@ -4,8 +4,8 @@ from typing import List
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://username:password@localhost:5432/motionvote"
-    test_database_url: str = "postgresql://username:password@localhost:5432/motionvote_test"
+    database_url: str = "postgresql://postgres:password@localhost:5432/motionvote"
+    test_database_url: str = "postgresql://postgres:password@localhost:5432/motionvote_test"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

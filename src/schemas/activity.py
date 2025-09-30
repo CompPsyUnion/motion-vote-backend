@@ -93,3 +93,11 @@ class CollaboratorResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PaginatedActivities(BaseModel):
+    items: List[ActivityResponse] = Field(..., description="活动列表")
+    total: int = Field(..., description="总数")
+    page: int = Field(..., description="当前页")
+    limit: int = Field(..., description="每页数量")
+    pages: int = Field(..., description="总页数")

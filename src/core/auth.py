@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
-from typing import Any, Optional, Union
+from typing import Optional
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from src.config import settings
 
-# 密码加密上下文
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# 密码加密上下文 - 临时使用pbkdf2替代bcrypt
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

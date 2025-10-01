@@ -67,7 +67,27 @@ class ActivityResponse(ActivityBase):
     createdAt: datetime = Field(..., description="创建时间", alias="created_at")
     updatedAt: datetime = Field(..., description="更新时间", alias="updated_at")
 
-    class ActivityResponseConfig:
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+
+# 添加详细的活动响应模式，包含协作者和辩题信息
+class ActivityDetailStatistics(BaseModel):
+    total_participants: int = Field(..., description="总参与人数")
+    checked_in_participants: int = Field(..., description="已入场人数") 
+    total_votes: int = Field(..., description="总投票数")
+    total_debates: int = Field(..., description="辩题总数")
+
+
+class ActivityDetail(ActivityResponse):
+    """活动详细信息，包含相关数据"""
+    collaborators: List['CollaboratorResponse'] = Field(default=[], description="协作者列表")
+    debates: List['DebateResponse'] = Field(default=[], description="辩题列表")
+    currentDebate: Optional['DebateResponse'] = Field(None, description="当前辩题", alias="current_debate")
+    statistics: ActivityDetailStatistics = Field(..., description="活动统计")
+
+    class Config:
         from_attributes = True
         populate_by_name = True
 
@@ -85,7 +105,7 @@ class CollaboratorStatus(str, Enum):
 
 
 class CollaboratorInvite(BaseModel):
-    email: str = Field(..., description="协作者邮箱")
+    email: str = Field(..., description="被邀请用户邮箱")
     permissions: List[CollaboratorPermission] = Field(..., description="权限列表")
 
 
@@ -93,23 +113,40 @@ class CollaboratorUpdate(BaseModel):
     permissions: List[CollaboratorPermission] = Field(..., description="权限列表")
 
 
-class CollaboratorResponse(BaseModel):
-    id: str = Field(..., description="协作者ID")
-    userId: str = Field(..., description="用户ID", alias="user_id")
-    activityId: str = Field(..., description="活动ID", alias="activity_id")
-    permissions: List[CollaboratorPermission] = Field(..., description="权限列表")
-    status: CollaboratorStatus = Field(..., description="邀请状态")
-    invitedAt: datetime = Field(..., description="邀请时间", alias="invited_at")
-    acceptedAt: Optional[datetime] = Field(None, description="接受时间", alias="accepted_at")
+class UserInfo(BaseModel):
+    """用户基本信息"""
+    id: str = Field(..., description="用户ID")
+    name: str = Field(..., description="用户姓名")
+    email: str = Field(..., description="用户邮箱")
+    avatar: Optional[str] = Field(None, description="用户头像")
 
     class Config:
         from_attributes = True
-        populate_by_name = True
+
+
+class CollaboratorResponse(BaseModel):
+    id: str = Field(..., description="协作者ID")
+    user: UserInfo = Field(..., description="用户信息")
+    permissions: List[CollaboratorPermission] = Field(..., description="权限列表")
+    status: CollaboratorStatus = Field(..., description="邀请状态")
+    invited_at: datetime = Field(..., description="邀请时间")
+    accepted_at: Optional[datetime] = Field(None, description="接受时间")
+
+    class Config:
+        from_attributes = True
 
 
 class PaginatedActivities(BaseModel):
     items: List[ActivityResponse] = Field(..., description="活动列表")
-    total: int = Field(..., description="总数")
-    page: int = Field(..., description="当前页")
+    total: int = Field(..., description="总数量")
+    page: int = Field(..., description="当前页码")
     limit: int = Field(..., description="每页数量")
-    pages: int = Field(..., description="总页数")
+    total_pages: int = Field(..., description="总页数")
+
+
+# 导入辩题相关的 Schema（避免循环导入）
+from src.schemas.debate import DebateResponse
+
+# 更新 forward references
+ActivityDetail.model_rebuild()
+CollaboratorResponse.model_rebuild()

@@ -21,7 +21,7 @@ class ApiResponse(BaseModel):
     success: bool = Field(default=True, description="请求是否成功")
     message: str = Field(..., description="响应消息")
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="响应时间戳")
+        default_factory=datetime.now, description="响应时间戳")
 
 
 class ErrorResponse(BaseModel):

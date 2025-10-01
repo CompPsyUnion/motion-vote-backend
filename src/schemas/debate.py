@@ -35,8 +35,13 @@ class DebateStatusUpdate(BaseModel):
     status: DebateStatus = Field(..., description="辩题状态")
 
 
+class DebateOrderItem(BaseModel):
+    id: str = Field(..., description="辩题ID")
+    order: int = Field(..., description="新的排序号")
+
+
 class DebateReorder(BaseModel):
-    debates: list[dict] = Field(..., description="辩题顺序调整列表")
+    debates: list[DebateOrderItem] = Field(..., description="辩题顺序调整列表")
 
 
 class CurrentDebateUpdate(BaseModel):

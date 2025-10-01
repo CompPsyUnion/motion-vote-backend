@@ -15,7 +15,7 @@ api_router.include_router(
     activities.router, prefix="/activities", tags=["activities"])
 
 # 辩题管理路由
-api_router.include_router(debates.router, prefix="/debates", tags=["debates"])
+api_router.include_router(debates.router, tags=["debates"])
 
 # 参与者管理路由
 api_router.include_router(

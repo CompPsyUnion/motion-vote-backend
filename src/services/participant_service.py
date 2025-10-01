@@ -39,7 +39,15 @@ class ParticipantService:
         user_id: str,
         page: int = 1,
         limit: int = 50,
-        status: Optional[str] = None
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+        name: Optional[str] = None,
+        code: Optional[str] = None,
+        phone: Optional[str] = None,
+        note: Optional[str] = None,
+        checked_in: Optional[bool] = None,
+        sort_by: Optional[str] = "created_at",
+        sort_order: Optional[str] = "desc"
     ) -> PaginatedParticipants:
         """获取分页参与者列表"""
         # 检查权限
@@ -48,11 +56,48 @@ class ParticipantService:
         # 构建查询
         query = self.db.query(Participant).filter(Participant.activity_id == activity_id)
         
-        # 状态筛选
+        # 状态筛选（向后兼容）
         if status == "checked_in":
             query = query.filter(Participant.checked_in == True)
         elif status == "not_checked_in":
             query = query.filter(Participant.checked_in == False)
+        
+        # 入场状态筛选（新方式）
+        if checked_in is not None:
+            query = query.filter(Participant.checked_in == checked_in)
+        
+        # 全文搜索
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                Participant.name.ilike(search_term) |
+                Participant.code.ilike(search_term) |
+                Participant.phone.ilike(search_term)
+            )
+        
+        # 具体字段模糊匹配
+        if name:
+            query = query.filter(Participant.name.ilike(f"%{name}%"))
+        
+        if code:
+            query = query.filter(Participant.code.ilike(f"%{code}%"))
+        
+        if phone:
+            query = query.filter(Participant.phone.ilike(f"%{phone}%"))
+        
+        if note:
+            query = query.filter(Participant.note.ilike(f"%{note}%"))
+        
+        # 排序
+        if sort_by and hasattr(Participant, sort_by):
+            sort_column = getattr(Participant, sort_by)
+        else:
+            sort_column = Participant.created_at
+        
+        if sort_order == "desc":
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
         
         # 计算总数
         total = query.count()
@@ -69,7 +114,7 @@ class ParticipantService:
             total=total,
             page=page,
             limit=limit,
-            total_pages=total_pages
+            totalPages=total_pages
         )
 
     def create_participant(
@@ -255,18 +300,22 @@ class ParticipantService:
         # 添加BOM以确保Excel正确显示中文
         return '\ufeff'.encode('utf-8') + csv_content.encode('utf-8')
 
-    def generate_participant_link(self, participant_id: str, user_id: str) -> str:
-        """生成参与者投票链接"""
+    def generate_participant_link(self, participant_id: str, user_id: str) -> dict:
+        """生成参与者链接参数
+        
+        返回参与者的活动ID和编号，用于前端构建链接
+        """
         participant = self.db.query(Participant).filter(Participant.id == participant_id).first()
         if not participant:
-            raise HTTPException(status_code=404, detail="Participant not found")
+            raise HTTPException(status_code=404, detail="参与者不存在")
         
         # 检查权限
         self._check_activity_permission(str(participant.activity_id), user_id)
         
-        # 生成链接
-        base_url = "http://localhost:3000"  # 这应该从配置中获取
-        return f"{base_url}/vote?activityId={participant.activity_id}&code={participant.code}"
+        return {
+            "activityId": str(participant.activity_id),
+            "participantCode": str(participant.code)
+        }
 
     def generate_participant_qrcode(self, participant_id: str, user_id: str) -> bytes:
         """生成参与者二维码（简化版本）"""

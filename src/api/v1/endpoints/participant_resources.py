@@ -8,26 +8,33 @@ from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user, get_db
 from src.models.user import User
-from src.schemas.participant import ParticipantEnter
+from src.schemas.participant import ParticipantEnter, ParticipantLinksResponse
 from src.services.participant_service import ParticipantService
 
 router = APIRouter()
 
 
-@router.get("/participants/{participant_id}/link")
+@router.get("/participants/{participant_id}/link", response_model=dict)
 async def generate_participant_link(
     participant_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """生成参与者的投票链接"""
+    """获取参与者链接参数
+    
+    返回参与者的活动ID和编号，用于前端构建链接
+    """
     service = ParticipantService(db)
-    link = service.generate_participant_link(
+    links_data = service.generate_participant_link(
         participant_id=participant_id,
         user_id=str(current_user.id)
     )
     
-    return Response(content=link, media_type="text/plain")
+    return {
+        "success": True,
+        "message": "链接生成成功",
+        "data": links_data
+    }
 
 
 @router.get("/participants/{participant_id}/qrcode")
@@ -46,25 +53,4 @@ async def generate_participant_qrcode(
     return Response(content=qrcode_data, media_type="image/png")
 
 
-@router.post("/votes/enter")
-async def participant_enter(
-    enter_data: ParticipantEnter,
-    db: Session = Depends(get_db)
-):
-    """参与者通过活动ID和编号进入活动"""
-    service = ParticipantService(db)
-    activity_info, vote_status = service.participant_enter(
-        activity_id=enter_data.activity_id,
-        participant_code=enter_data.participant_code,
-        device_fingerprint=enter_data.device_fingerprint
-    )
-    
-    return {
-        "success": True,
-        "message": "入场成功",
-        "data": {
-            "activity": activity_info["activity"],
-            "participant": activity_info["participant"],
-            "voteStatus": vote_status
-        }
-    }
+# votes/enter端点已移动到votes.py文件中

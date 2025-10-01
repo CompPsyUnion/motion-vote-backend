@@ -66,20 +66,39 @@ class ActivityService:
             collaborator_activity_ids = self.db.query(Collaborator.activity_id).filter(
                 Collaborator.user_id == user_id,
                 Collaborator.status == CollaboratorStatus.accepted
-            ).subquery()
-            query = query.filter(Activity.id.in_(
-                select(collaborator_activity_ids.c.activity_id)))
+            ).all()
+            activity_ids = [str(c.activity_id) for c in collaborator_activity_ids]
+            if activity_ids:
+                query = query.filter(Activity.id.in_(activity_ids))
+            else:
+                # 如果没有协作的活动，返回空结果
+                query = query.filter(Activity.id.is_(None))
         else:
-            # 默认获取用户创建或协作者的活动
-            all_ids = union_all(
-                select(Activity.id.label('activity_id')).where(
-                    Activity.owner_id == user_id),
-                select(Collaborator.activity_id.label('activity_id')).where(
-                    Collaborator.user_id == user_id,
-                    Collaborator.status == CollaboratorStatus.accepted
-                )
-            ).subquery()
-            query = query.filter(Activity.id.in_(select(all_ids.c.activity_id)))
+            # 默认获取用户创建或协作者的活动 - 使用更简单的方法
+            owned_activities = query.filter(Activity.owner_id == user_id)
+            
+            # 获取协作的活动ID
+            collaborator_activity_ids = self.db.query(Collaborator.activity_id).filter(
+                Collaborator.user_id == user_id,
+                Collaborator.status == CollaboratorStatus.accepted
+            ).all()
+            
+            if collaborator_activity_ids:
+                activity_ids = [str(c.activity_id) for c in collaborator_activity_ids]
+                collaborated_activities = self.db.query(Activity).filter(Activity.id.in_(activity_ids))
+                
+                # 合并两个查询结果 - 使用Python集合去重
+                owned_ids = {str(a.id) for a in owned_activities.all()}
+                collab_ids = {str(a.id) for a in collaborated_activities.all()}
+                all_activity_ids = list(owned_ids | collab_ids)
+                
+                if all_activity_ids:
+                    query = query.filter(Activity.id.in_(all_activity_ids))
+                else:
+                    query = query.filter(Activity.id.is_(None))
+            else:
+                # 只有拥有的活动
+                query = query.filter(Activity.owner_id == user_id)
 
         # 状态筛选
         if status_enum:
@@ -92,13 +111,16 @@ class ActivityService:
             
             for term in search_terms:
                 term_pattern = f"%{term}%"
-                search_conditions.append(
-                    or_(
-                        Activity.name.ilike(term_pattern),
-                        Activity.description.ilike(term_pattern),
-                        Activity.location.ilike(term_pattern)
-                    )
-                )
+                term_conditions = [
+                    Activity.name.ilike(term_pattern),
+                    Activity.description.ilike(term_pattern),
+                    Activity.location.ilike(term_pattern)
+                ]
+                
+                # 如果Activity有tags字段，也进行搜索
+                # 注意：这里暂时不搜索tags，可以在需要时添加更复杂的JSON搜索逻辑
+                
+                search_conditions.append(or_(*term_conditions))
             
             if search_conditions:
                 query = query.filter(and_(*search_conditions))

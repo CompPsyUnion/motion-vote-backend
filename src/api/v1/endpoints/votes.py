@@ -1,6 +1,103 @@
-from fastapi import APIRouter
+"""投票系统 API 端点
+
+基于 OpenAPI 规范实现的投票系统接口，包括：
+- 参与者入场
+- 投票操作
+- 获取投票状态
+- 获取投票结果
+"""
+
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from src.api.dependencies import get_db
+from src.models.vote import Participant, Vote
+from src.models.debate import Debate
+from src.models.activity import Activity
+from src.schemas.vote import (
+    VoteRequest, VoteStatus, VoteResults, VotePosition,
+    ParticipantEnter, ParticipantInfo, ActivityInfo
+)
+from src.schemas.base import ApiResponse
+from src.services.vote_service import VoteService
 
 router = APIRouter()
 
-# 投票系统相关的路由处理器将在这里实现
-# 包括：参与者入场、投票、获取投票状态、获取投票结果
+
+@router.post("/enter")
+async def participant_enter(
+    enter_data: ParticipantEnter,
+    db: Session = Depends(get_db)
+):
+    """参与者通过活动ID和编号进入活动"""
+    service = VoteService(db)
+    result = service.participant_enter(
+        activity_id=enter_data.activity_id,
+        participant_code=enter_data.participant_code,
+        device_fingerprint=enter_data.device_fingerprint
+    )
+    
+    return {
+        "success": True,
+        "message": "入场成功",
+        "data": result
+    }
+
+
+@router.post("/debates/{debate_id}")
+async def vote_for_debate(
+    debate_id: str,
+    vote_data: VoteRequest,
+    db: Session = Depends(get_db)
+):
+    """参与者对指定辩题进行投票"""
+    service = VoteService(db)
+    result = service.vote_for_debate(
+        debate_id=debate_id,
+        session_token=vote_data.session_token,
+        position=vote_data.position
+    )
+    
+    return {
+        "success": True,
+        "message": "投票成功",
+        "data": result
+    }
+
+
+@router.get("/debates/{debate_id}")
+async def get_vote_status(
+    debate_id: str,
+    session_token: str = Query(..., alias="sessionToken", description="会话令牌"),
+    db: Session = Depends(get_db)
+):
+    """获取参与者在指定辩题的投票状态"""
+    service = VoteService(db)
+    status = service.get_vote_status(
+        debate_id=debate_id,
+        session_token=session_token
+    )
+    
+    return {
+        "success": True,
+        "message": "获取投票状态成功",
+        "data": status
+    }
+
+
+@router.get("/debates/{debate_id}/results")
+async def get_debate_results(
+    debate_id: str,
+    db: Session = Depends(get_db)
+):
+    """获取指定辩题的投票统计结果"""
+    service = VoteService(db)
+    results = service.get_debate_results(debate_id=debate_id)
+    
+    return {
+        "success": True,
+        "message": "获取投票结果成功",
+        "data": results
+    }

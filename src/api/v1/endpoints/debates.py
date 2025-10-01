@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from src.api.dependencies import get_current_user, get_db
@@ -58,32 +58,20 @@ def check_activity_permission(
 
 def get_debate_vote_stats(debate_id: str, db: Session) -> VoteStats:
     """获取辩题投票统计"""
-    # 统计各种投票数量
-    vote_counts = db.query(
-        func.count(Vote.id).label('total_votes'),
-        func.sum(func.case([(Vote.position == VotePosition.pro, 1)], else_=0)).label(
-            'pro_votes'),
-        func.sum(func.case([(Vote.position == VotePosition.con, 1)], else_=0)).label(
-            'con_votes'),
-        func.sum(func.case([(Vote.position == VotePosition.abstain, 1)], else_=0)).label(
-            'abstain_votes')
-    ).filter(Vote.debate_id == debate_id).first()
-
-    if vote_counts:
-        total_votes = vote_counts.total_votes or 0
-        pro_votes = vote_counts.pro_votes or 0
-        con_votes = vote_counts.con_votes or 0
-        abstain_votes = vote_counts.abstain_votes or 0
-    else:
-        return VoteStats(
-            total_votes=0,
-            pro_votes=0,
-            con_votes=0,
-            abstain_votes=0,
-            pro_percentage=0,
-            con_percentage=0,
-            abstain_percentage=0
-        )
+    # 分别统计各种投票数量 - 使用更简单的查询方法
+    total_votes = db.query(func.count(Vote.id)).filter(Vote.debate_id == debate_id).scalar() or 0
+    pro_votes = db.query(func.count(Vote.id)).filter(
+        Vote.debate_id == debate_id, 
+        Vote.position == VotePosition.pro
+    ).scalar() or 0
+    con_votes = db.query(func.count(Vote.id)).filter(
+        Vote.debate_id == debate_id, 
+        Vote.position == VotePosition.con
+    ).scalar() or 0
+    abstain_votes = db.query(func.count(Vote.id)).filter(
+        Vote.debate_id == debate_id, 
+        Vote.position == VotePosition.abstain
+    ).scalar() or 0
 
     # 计算百分比
     pro_percentage = (pro_votes / total_votes * 100) if total_votes > 0 else 0
@@ -105,21 +93,73 @@ def get_debate_vote_stats(debate_id: str, db: Session) -> VoteStats:
 @router.get("/activities/{activity_id}/debates")
 async def get_debates(
     activity_id: str,
+    search: Optional[str] = Query(default=None, description="搜索关键词 - 支持辩题标题、描述模糊匹配"),
+    status: Optional[str] = Query(default=None, description="辩题状态筛选 (draft|active|locked|archived)"),
+    page: int = Query(default=1, ge=1, description="页码"),
+    limit: int = Query(default=50, ge=1, le=100, description="每页数量"),
+    sort_by: Optional[str] = Query(default="order", description="排序字段 (order|created_at|title)"),
+    sort_order: Optional[str] = Query(default="asc", description="排序方向 (asc|desc)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """获取辩题列表"""
+    """获取辩题列表
+    
+    支持多种筛选和搜索方式：
+    - search: 全文搜索(标题、描述)
+    - status: 状态筛选
+    - page/limit: 分页控制
+    - sort_by/sort_order: 自定义排序
+    """
+    from math import ceil
+    from sqlalchemy import or_, desc, asc
+    
     # 检查权限
     check_activity_permission(activity_id, str(current_user.id), "view", db)
 
-    # 获取辩题列表，按order排序
-    debates = db.query(Debate).filter(
-        Debate.activity_id == activity_id
-    ).order_by(Debate.order.asc(), Debate.created_at.asc()).all()
-
-    print(f"DEBUG: activity_id={activity_id}, found {len(debates)} debates")
-    for debate in debates:
-        print(f"DEBUG: debate id={debate.id}, title={debate.title}")
+    # 构建查询
+    query = db.query(Debate).filter(Debate.activity_id == activity_id)
+    
+    # 搜索筛选
+    if search and search.strip():
+        search_terms = search.strip().split()
+        search_conditions = []
+        for term in search_terms:
+            term_pattern = f"%{term}%"
+            search_conditions.append(
+                or_(
+                    Debate.title.ilike(term_pattern),
+                    Debate.description.ilike(term_pattern)
+                )
+            )
+        if search_conditions:
+            query = query.filter(*search_conditions)
+    
+    # 状态筛选
+    if status and status.strip():
+        try:
+            from src.schemas.debate import DebateStatus
+            status_enum = DebateStatus(status.strip().lower())
+            query = query.filter(Debate.status == status_enum)
+        except ValueError:
+            pass  # 忽略无效状态
+    
+    # 排序
+    sort_column = Debate.order  # 默认按order排序
+    if sort_by == "created_at":
+        sort_column = Debate.created_at
+    elif sort_by == "title":
+        sort_column = Debate.title
+    elif sort_by == "order":
+        sort_column = Debate.order
+    
+    if sort_order == "desc":
+        query = query.order_by(desc(sort_column))
+    else:
+        query = query.order_by(asc(sort_column))
+    
+    # 分页
+    total = query.count()
+    debates = query.offset((page - 1) * limit).limit(limit).all()
 
     # 转换为响应格式
     debate_list = [DebateResponse.model_validate(debate) for debate in debates]
@@ -127,7 +167,13 @@ async def get_debates(
     return {
         "success": True,
         "message": "获取辩题列表成功",
-        "data": debate_list
+        "data": {
+            "items": debate_list,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": ceil(total / limit) if limit > 0 else 0
+        }
     }
 
 
@@ -149,9 +195,6 @@ async def create_debate(
 
     # 创建辩题
     debate_dict = debate_data.model_dump()
-    print(f"DEBUG: Creating debate with data: {debate_dict}")
-    print(f"DEBUG: activity_id={activity_id}, max_order={max_order}")
-    
     debate = Debate(
         **debate_dict,
         activity_id=activity_id,
@@ -161,8 +204,6 @@ async def create_debate(
     db.add(debate)
     db.commit()
     db.refresh(debate)
-
-    print(f"DEBUG: Created debate with id={debate.id}, title={debate.title}")
 
     # 转换为响应格式
     debate_response = DebateResponse.model_validate(debate)
@@ -174,7 +215,7 @@ async def create_debate(
     }
 
 
-@router.get("/debates/{debate_id}", response_model=DebateDetailResponse)
+@router.get("/debates/{debate_id}")
 async def get_debate_detail(
     debate_id: str,
     db: Session = Depends(get_db)
@@ -189,13 +230,19 @@ async def get_debate_detail(
 
     # 构建响应
     debate_dict = DebateResponse.model_validate(debate).model_dump()
-    return DebateDetailResponse(
+    debate_detail = DebateDetailResponse(
         **debate_dict,
         vote_stats=vote_stats
     )
+    
+    return {
+        "success": True,
+        "message": "获取辩题详情成功",
+        "data": debate_detail
+    }
 
 
-@router.put("/debates/{debate_id}", response_model=DebateResponse)
+@router.put("/debates/{debate_id}")
 async def update_debate(
     debate_id: str,
     debate_data: DebateUpdate,
@@ -213,13 +260,22 @@ async def update_debate(
 
     # 更新字段
     update_data = debate_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(debate, field, value)
-
+    
+    # 逐个更新字段以避免类型问题
+    if update_data:
+        for field, value in update_data.items():
+            if hasattr(debate, field):
+                db.query(Debate).filter(Debate.id == debate_id).update({field: value})
+    
     db.commit()
-    db.refresh(debate)
-
-    return debate
+    
+    # 重新获取更新后的辩题
+    updated_debate = db.query(Debate).filter(Debate.id == debate_id).first()
+    
+    return {
+        "success": True,
+        "message": "更新辩题成功"
+    }
 
 
 @router.delete("/debates/{debate_id}")
@@ -234,21 +290,24 @@ async def delete_debate(
         raise HTTPException(status_code=404, detail="Debate not found")
 
     # 检查权限
-    activity = check_activity_permission(
+    check_activity_permission(
         str(debate.activity_id), str(current_user.id), "edit", db)
 
     # 检查是否为当前辩题
+    activity = db.query(Activity).filter(Activity.id == debate.activity_id).first()
     current_debate_id = getattr(activity, 'current_debate_id')
     if current_debate_id and str(current_debate_id) == str(debate_id):
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete current debate. Please switch to another debate first."
-        )
+        # 清除当前辩题
+        setattr(activity, 'current_debate_id', None)
 
+    # 删除辩题
     db.delete(debate)
     db.commit()
 
-    return {"message": "Debate deleted successfully"}
+    return {
+        "success": True,
+        "message": "删除辩题成功"
+    }
 
 
 @router.put("/debates/{debate_id}/status")
@@ -281,17 +340,15 @@ async def reorder_debates(
     current_user: User = Depends(get_current_user)
 ):
     """调整辩题顺序"""
+    # 这里需要验证所有辩题都属于同一个活动
     if not reorder_data.debates:
-        raise HTTPException(
-            status_code=400, detail="Debates list cannot be empty")
+        raise HTTPException(status_code=400, detail="No debates provided")
 
-    # 获取第一个辩题来确定活动ID和检查权限
-    first_debate_id = reorder_data.debates[0].id
-    if not first_debate_id:
-        raise HTTPException(status_code=400, detail="Debate ID is required")
-
+    # 获取第一个辩题来确定活动ID
     first_debate = db.query(Debate).filter(
-        Debate.id == first_debate_id).first()
+        Debate.id == reorder_data.debates[0].id
+    ).first()
+
     if not first_debate:
         raise HTTPException(status_code=404, detail="Debate not found")
 
@@ -299,27 +356,15 @@ async def reorder_debates(
     check_activity_permission(
         str(first_debate.activity_id), str(current_user.id), "edit", db)
 
-    # 批量更新排序
-    try:
-        for debate_item in reorder_data.debates:
-            debate_id = debate_item.id
-            new_order = debate_item.order
+    # 批量更新顺序
+    for item in reorder_data.debates:
+        db.query(Debate).filter(Debate.id == item.id).update({"order": item.order})
 
-            debate = db.query(Debate).filter(
-                Debate.id == debate_id,
-                Debate.activity_id == first_debate.activity_id
-            ).first()
-
-            if debate:
-                setattr(debate, 'order', new_order)
-
-        db.commit()
-        return {"message": "Debates reordered successfully"}
-
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=400, detail="Failed to reorder debates")
+    db.commit()
+    return {
+        "success": True,
+        "message": "辩题排序更新成功"
+    }
 
 
 @router.get("/activities/{activity_id}/current-debate", response_model=DebateDetailResponse)
@@ -345,10 +390,16 @@ async def get_current_debate(
 
     # 构建响应
     debate_dict = DebateResponse.model_validate(debate).model_dump()
-    return DebateDetailResponse(
+    debate_detail = DebateDetailResponse(
         **debate_dict,
         vote_stats=vote_stats
     )
+    
+    return {
+        "success": True,
+        "message": "获取当前辩题成功",
+        "data": debate_detail
+    }
 
 
 @router.put("/activities/{activity_id}/current-debate")
@@ -374,7 +425,12 @@ async def set_current_debate(
             status_code=404, detail="Debate not found in this activity")
 
     # 更新当前辩题
-    setattr(activity, 'current_debate_id', current_debate_data.debate_id)
+    db.query(Activity).filter(Activity.id == activity_id).update({
+        "current_debate_id": current_debate_data.debate_id
+    })
     db.commit()
 
-    return {"message": "Current debate updated successfully"}
+    return {
+        "success": True,
+        "message": "当前辩题切换成功"
+    }

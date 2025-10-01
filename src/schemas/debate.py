@@ -14,10 +14,12 @@ class DebateStatus(str, Enum):
 
 class DebateBase(BaseModel):
     title: str = Field(..., description="辩题标题")
-    pro_description: str = Field(..., description="正方观点描述")
-    con_description: str = Field(..., description="反方观点描述")
+    pro_description: str = Field(..., alias="proDescription", description="正方观点描述")
+    con_description: str = Field(..., alias="conDescription", description="反方观点描述")
     background: Optional[str] = Field(None, description="辩题背景介绍")
-    estimated_duration: Optional[int] = Field(None, description="预计辩论时长（分钟）")
+    estimated_duration: Optional[int] = Field(None, alias="estimatedDuration", description="预计辩论时长（分钟）")
+
+    model_config = {"populate_by_name": True}
 
 
 class DebateCreate(DebateBase):
@@ -26,10 +28,12 @@ class DebateCreate(DebateBase):
 
 class DebateUpdate(BaseModel):
     title: Optional[str] = Field(None, description="辩题标题")
-    pro_description: Optional[str] = Field(None, description="正方观点描述")
-    con_description: Optional[str] = Field(None, description="反方观点描述")
+    pro_description: Optional[str] = Field(None, alias="proDescription", description="正方观点描述")
+    con_description: Optional[str] = Field(None, alias="conDescription", description="反方观点描述")
     background: Optional[str] = Field(None, description="辩题背景介绍")
-    estimated_duration: Optional[int] = Field(None, description="预计辩论时长（分钟）")
+    estimated_duration: Optional[int] = Field(None, alias="estimatedDuration", description="预计辩论时长（分钟）")
+
+    model_config = {"populate_by_name": True}
 
 
 class DebateStatusUpdate(BaseModel):
@@ -46,19 +50,20 @@ class DebateReorder(BaseModel):
 
 
 class CurrentDebateUpdate(BaseModel):
-    debate_id: str = Field(..., description="当前辩题ID")
+    debate_id: str = Field(..., alias="debateId", description="当前辩题ID")
+    
+    model_config = {"populate_by_name": True}
 
 
 class DebateResponse(DebateBase):
     id: str = Field(..., description="辩题ID")
-    activity_id: str = Field(..., description="活动ID")
+    activity_id: str = Field(..., alias="activityId", description="活动ID")
     status: DebateStatus = Field(..., description="辩题状态")
     order: int = Field(..., description="排序号")
-    created_at: datetime = Field(..., description="创建时间")
-    updated_at: datetime = Field(..., description="更新时间")
+    created_at: datetime = Field(..., alias="createdAt", description="创建时间")
+    updated_at: datetime = Field(..., alias="updatedAt", description="更新时间")
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class VoteStats(BaseModel):

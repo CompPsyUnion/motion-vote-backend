@@ -102,7 +102,7 @@ def get_debate_vote_stats(debate_id: str, db: Session) -> VoteStats:
     )
 
 
-@router.get("/activities/{activity_id}/debates", response_model=List[DebateResponse])
+@router.get("/activities/{activity_id}/debates")
 async def get_debates(
     activity_id: str,
     db: Session = Depends(get_db),
@@ -117,10 +117,21 @@ async def get_debates(
         Debate.activity_id == activity_id
     ).order_by(Debate.order.asc(), Debate.created_at.asc()).all()
 
-    return debates
+    print(f"DEBUG: activity_id={activity_id}, found {len(debates)} debates")
+    for debate in debates:
+        print(f"DEBUG: debate id={debate.id}, title={debate.title}")
+
+    # 转换为响应格式
+    debate_list = [DebateResponse.model_validate(debate) for debate in debates]
+    
+    return {
+        "success": True,
+        "message": "获取辩题列表成功",
+        "data": debate_list
+    }
 
 
-@router.post("/activities/{activity_id}/debates", response_model=DebateResponse)
+@router.post("/activities/{activity_id}/debates", status_code=201)
 async def create_debate(
     activity_id: str,
     debate_data: DebateCreate,
@@ -138,6 +149,9 @@ async def create_debate(
 
     # 创建辩题
     debate_dict = debate_data.model_dump()
+    print(f"DEBUG: Creating debate with data: {debate_dict}")
+    print(f"DEBUG: activity_id={activity_id}, max_order={max_order}")
+    
     debate = Debate(
         **debate_dict,
         activity_id=activity_id,
@@ -148,7 +162,16 @@ async def create_debate(
     db.commit()
     db.refresh(debate)
 
-    return debate
+    print(f"DEBUG: Created debate with id={debate.id}, title={debate.title}")
+
+    # 转换为响应格式
+    debate_response = DebateResponse.model_validate(debate)
+    
+    return {
+        "success": True,
+        "message": "创建辩题成功",
+        "data": debate_response
+    }
 
 
 @router.get("/debates/{debate_id}", response_model=DebateDetailResponse)

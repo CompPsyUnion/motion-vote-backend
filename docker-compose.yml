@@ -12,6 +12,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    networks:
+      - motion-vote-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 9s
@@ -25,6 +27,8 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    networks:
+      - motion-vote-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 9s
@@ -37,6 +41,8 @@ services:
   #   restart: unless-stopped
   #   ports:
   #     - "5349:8000"
+  #   networks:
+  #     - motion-vote-network
   #   environment:
   #     - GIN_MODE=release
   #   volumes:
@@ -47,8 +53,11 @@ services:
   motion-vote-api:
     build: .
     container_name: motion-vote-api
+    restart: unless-stopped
     ports:
       - "8000:8000"
+    networks:
+      - motion-vote-network
     environment:
       - DATABASE_URL=postgresql://postgres:password@motion-vote-db:5432/motionvote
       - REDIS_URL=redis://motion-vote-redis:6379/0
@@ -58,7 +67,6 @@ services:
         condition: service_healthy
       motion-vote-redis:
         condition: service_healthy
-    restart: unless-stopped
     volumes:
       # 挂载源码目录实现热重载
       - ./src:/app/src
@@ -68,3 +76,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+
+networks:
+  motion-vote-network:
+    driver: bridge

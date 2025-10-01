@@ -1,13 +1,12 @@
 import uuid
 
-from sqlalchemy import JSON, Boolean, Column, DateTime
+from sqlalchemy import JSON, Column, DateTime
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from src.core.database import Base
-from src.schemas.activity import (ActivityStatus, CollaboratorPermission,
-                                  CollaboratorStatus)
+from src.schemas.activity import (ActivityStatus, CollaboratorStatus)
 
 
 class Activity(Base):

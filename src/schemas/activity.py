@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class ActivityStatus(str, Enum):
@@ -66,7 +67,7 @@ class ActivityResponse(ActivityBase):
     createdAt: datetime = Field(..., description="创建时间", alias="created_at")
     updatedAt: datetime = Field(..., description="更新时间", alias="updated_at")
 
-    class Config:
+    class ActivityResponseConfig:
         from_attributes = True
         populate_by_name = True
 

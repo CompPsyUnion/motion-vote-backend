@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
 from typing import Optional
 
-from src.core.database import get_db
-from src.schemas.user import UserResponse, UserUpdate
-from src.schemas.base import ApiResponse, PaginatedResponse
-from src.services.user_service import UserService
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
 from src.api.dependencies import get_current_user
+from src.core.database import get_db
 from src.models.user import User
+from src.schemas.base import ApiResponse, PaginatedResponse
+from src.schemas.user import UserResponse, UserUpdate
+from src.services.user_service import UserService
 
 router = APIRouter()
 

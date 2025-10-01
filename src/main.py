@@ -1,12 +1,12 @@
+import time
+import uuid
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-import time
-import uuid
-
-from src.config import settings
 from src.api.v1.router import api_router
+from src.config import settings
 from src.core.exceptions import AppException
 
 

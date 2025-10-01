@@ -1,11 +1,12 @@
-import pytest
 import asyncio
+
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from src.main import app
-from src.core.database import get_db, Base
 from src.config import settings
+from src.core.database import Base, get_db
+from src.main import app
 
 # 测试数据库配置
 SQLALCHEMY_DATABASE_URL = settings.test_database_url

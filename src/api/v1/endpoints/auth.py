@@ -1,11 +1,12 @@
+from http import HTTPStatus
+
 from fastapi import APIRouter, Depends
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
-from http import HTTPStatus
-
 from src.core.database import get_db
-from src.schemas.user import UserCreate, UserLogin, TokenResponse, PasswordReset
 from src.schemas.base import ApiResponse
+from src.schemas.user import (PasswordReset, TokenResponse, UserCreate,
+                              UserLogin)
 from src.services.auth_service import AuthService
 
 router = APIRouter()

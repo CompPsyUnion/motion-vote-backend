@@ -1,16 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, text, select, union_all
-from typing import List, Optional
 from math import ceil
-from src.api.dependencies import get_db, get_current_user
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, or_, select, text, union_all
+from sqlalchemy.orm import Session
+from src.api.dependencies import get_current_user, get_db
 from src.models.activity import Activity, Collaborator
 from src.models.user import User
-from src.schemas.activity import (
-    ActivityResponse, ActivityCreate, ActivityUpdate,
-    PaginatedActivities, CollaboratorResponse, CollaboratorInvite, CollaboratorUpdate,
-    ActivityStatus, CollaboratorStatus
-)
+from src.schemas.activity import (ActivityCreate, ActivityResponse,
+                                  ActivityStatus, ActivityUpdate,
+                                  CollaboratorInvite, CollaboratorResponse,
+                                  CollaboratorStatus, CollaboratorUpdate,
+                                  PaginatedActivities)
 
 router = APIRouter()
 

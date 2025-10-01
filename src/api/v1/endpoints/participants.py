@@ -10,7 +10,7 @@
 import io
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -71,7 +71,7 @@ async def batch_import_participants(
 ):
     """通过Excel文件批量导入参与者"""
     if not file.filename or not file.filename.endswith(('.xlsx', '.xls')):
-        raise ValueError("只支持Excel文件格式")
+        raise HTTPException(status_code=400, detail="只支持Excel文件格式(.xlsx, .xls)")
     
     service = ParticipantService(db)
     return service.batch_import_participants(
@@ -87,17 +87,17 @@ async def export_participants(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """导出参与者列表为Excel文件"""
+    """导出参与者列表为CSV文件"""
     service = ParticipantService(db)
-    excel_data = service.export_participants(
+    csv_data = service.export_participants(
         activity_id=activity_id,
         user_id=str(current_user.id)
     )
     
     return StreamingResponse(
-        io.BytesIO(excel_data),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=participants_{activity_id}.xlsx"}
+        io.BytesIO(csv_data),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=participants_{activity_id}.csv"}
     )
 
 

@@ -1,7 +1,10 @@
+import csv
+import io
 from typing import Optional
 from datetime import datetime
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
+from openpyxl import load_workbook
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
@@ -108,28 +111,149 @@ class ParticipantService:
     def batch_import_participants(
         self,
         activity_id: str,
-        file,
+        file: UploadFile,
         user_id: str
     ) -> ParticipantBatchImportResult:
-        """批量导入参与者（简化版本）"""
+        """批量导入参与者"""
         # 检查权限
         self._check_activity_permission(activity_id, user_id)
         
-        # 简化实现，返回基本结果
-        return ParticipantBatchImportResult(
-            total=0,
-            success=0,
-            failed=0,
-            errors=["批量导入功能待实现"]
-        )
+        # 读取Excel文件
+        try:
+            contents = file.file.read()
+            workbook = load_workbook(io.BytesIO(contents))
+            worksheet = workbook.active
+            
+            total = 0
+            success = 0
+            failed = 0
+            errors = []
+            
+            if worksheet is not None:
+                # 跳过标题行，从第二行开始
+                for row in worksheet.iter_rows(min_row=2, values_only=True):
+                    if not row or not any(row):  # 跳过空行
+                        continue
+                        
+                    total += 1
+                    try:
+                        # 获取行数据
+                        name = str(row[0]).strip() if row[0] else ""
+                        phone = str(row[1]).strip() if len(row) > 1 and row[1] else None
+                        note = str(row[2]).strip() if len(row) > 2 and row[2] else None
+                        
+                        # 验证必填字段
+                        if not name:
+                            errors.append(f"第{total + 1}行：姓名不能为空")
+                            failed += 1
+                            continue
+                        
+                        # 检查姓名是否已存在
+                        existing = self.db.query(Participant).filter(
+                            and_(
+                                Participant.activity_id == activity_id,
+                                Participant.name == name
+                            )
+                        ).first()
+                        
+                        if existing:
+                            errors.append(f"第{total + 1}行：参与者 {name} 已存在")
+                            failed += 1
+                            continue
+                        
+                        # 创建参与者
+                        code = self._generate_participant_code(activity_id)
+                        participant = Participant(
+                            activity_id=activity_id,
+                            code=code,
+                            name=name,
+                            phone=phone,
+                            note=note
+                        )
+                        
+                        self.db.add(participant)
+                        success += 1
+                        
+                    except Exception as e:
+                        errors.append(f"第{total + 1}行：{str(e)}")
+                        failed += 1
+                
+                # 提交所有更改
+                if success > 0:
+                    self.db.commit()
+            
+            return ParticipantBatchImportResult(
+                total=total,
+                success=success,
+                failed=failed,
+                errors=errors[:10]  # 只返回前10个错误
+            )
+            
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=400, detail=f"文件处理错误: {str(e)}")
 
     def export_participants(self, activity_id: str, user_id: str) -> bytes:
-        """导出参与者数据为Excel（简化版本）"""
+        """导出参与者数据为CSV"""
         # 检查权限
-        self._check_activity_permission(activity_id, user_id)
+        activity = self._check_activity_permission(activity_id, user_id)
         
-        # 简化实现，返回空字节
-        return b"Export functionality not implemented yet"
+        # 获取参与者数据
+        participants = self.db.query(Participant).filter(
+            Participant.activity_id == activity_id
+        ).order_by(Participant.code).all()
+        
+        # 创建CSV内容
+        output = io.StringIO()
+        writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+        
+        # 写入标题行
+        headers = ["编号", "姓名", "手机号", "备注", "是否入场", "入场时间", "创建时间"]
+        writer.writerow(headers)
+        
+        # 写入数据行
+        for participant in participants:
+            # 处理手机号
+            phone_value = getattr(participant, 'phone') or ""
+            
+            # 处理备注
+            note_value = getattr(participant, 'note') or ""
+            
+            # 处理入场状态
+            checked_in_value = getattr(participant, 'checked_in', False)
+            checked_in_text = "是" if checked_in_value else "否"
+            
+            # 处理入场时间
+            checked_in_at_value = getattr(participant, 'checked_in_at', None)
+            if checked_in_at_value:
+                checkin_time = checked_in_at_value.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                checkin_time = ""
+            
+            # 处理创建时间
+            created_at_value = getattr(participant, 'created_at', None)
+            if created_at_value:
+                created_time = created_at_value.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                created_time = ""
+            
+            # 写入行数据
+            writer.writerow([
+                str(participant.code),
+                str(participant.name),
+                str(phone_value),
+                str(note_value),
+                checked_in_text,
+                checkin_time,
+                created_time
+            ])
+        
+        # 转换为字节
+        csv_content = output.getvalue()
+        output.close()
+        
+        # 添加BOM以确保Excel正确显示中文
+        return '\ufeff'.encode('utf-8') + csv_content.encode('utf-8')
 
     def generate_participant_link(self, participant_id: str, user_id: str) -> str:
         """生成参与者投票链接"""

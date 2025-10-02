@@ -18,7 +18,7 @@ async def get_profile(
     db: Session = Depends(get_db)
 ):
     """获取用户信息"""
-    return current_user
+    return UserResponse.model_validate(current_user)
 
 
 @router.put("/profile", response_model=ApiResponse)

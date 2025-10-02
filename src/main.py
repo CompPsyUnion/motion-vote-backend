@@ -1,5 +1,6 @@
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from src.api.v1.router import api_router
 from src.config import settings
+from src.core.database import init_database
 from src.core.exceptions import AppException
 
 
@@ -75,6 +77,17 @@ def create_app() -> FastAPI:
 
     # 包含API路由
     app.include_router(api_router, prefix="/api")
+
+    # 添加启动事件
+    # 使用 lifespan 事件处理器替代 on_event
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """应用启动和关闭时执行"""
+        init_database()
+        yield
+
+    app.router.lifespan_context = lifespan
 
     return app
 

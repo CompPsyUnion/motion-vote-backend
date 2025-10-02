@@ -170,71 +170,63 @@ class ParticipantService:
             workbook = load_workbook(io.BytesIO(contents))
             worksheet = workbook.active
 
-            total = 0
-            success = 0
-            failed = 0
+            total = success = failed = 0
             errors = []
 
-            if worksheet is not None:
-                # 跳过标题行，从第二行开始
-                for row in worksheet.iter_rows(min_row=2, values_only=True):
-                    if not row or not any(row):  # 跳过空行
-                        continue
+            if worksheet is None:
+                return ParticipantBatchImportResult(
+                    total=0, success=0, failed=0, errors=["未找到工作表"]
+                )
 
-                    total += 1
-                    try:
-                        # 获取行数据
-                        name = str(row[0]).strip() if row[0] else ""
-                        phone = str(row[1]).strip() if len(
-                            row) > 1 and row[1] else None
-                        note = str(row[2]).strip() if len(
-                            row) > 2 and row[2] else None
+            # 跳过标题行，从第二行开始
+            for idx, row in enumerate(worksheet.iter_rows(min_row=2, values_only=True), start=2):
+                if not row or not any(row):
+                    continue
 
-                        # 验证必填字段
-                        if not name:
-                            errors.append(f"第{total + 1}行：姓名不能为空")
-                            failed += 1
-                            continue
+                total += 1
+                name = str(row[0]).strip() if row[0] else ""
+                phone = str(row[1]).strip() if len(row) > 1 and row[1] else None
+                note = str(row[2]).strip() if len(row) > 2 and row[2] else None
 
-                        # 检查姓名是否已存在
-                        existing = self.db.query(Participant).filter(
-                            and_(
-                                Participant.activity_id == activity_id,
-                                Participant.name == name
-                            )
-                        ).first()
+                if not name:
+                    errors.append(f"第{idx}行：姓名不能为空")
+                    failed += 1
+                    continue
 
-                        if existing:
-                            errors.append(f"第{total + 1}行：参与者 {name} 已存在")
-                            failed += 1
-                            continue
+                existing = self.db.query(Participant).filter(
+                    and_(
+                        Participant.activity_id == activity_id,
+                        Participant.name == name
+                    )
+                ).first()
+                if existing:
+                    errors.append(f"第{idx}行：参与者 {name} 已存在")
+                    failed += 1
+                    continue
 
-                        # 创建参与者
-                        code = self._generate_participant_code(activity_id)
-                        participant = Participant(
-                            activity_id=activity_id,
-                            code=code,
-                            name=name,
-                            phone=phone,
-                            note=note
-                        )
+                try:
+                    code = self._generate_participant_code(activity_id)
+                    participant = Participant(
+                        activity_id=activity_id,
+                        code=code,
+                        name=name,
+                        phone=phone,
+                        note=note
+                    )
+                    self.db.add(participant)
+                    success += 1
+                except Exception as e:
+                    errors.append(f"第{idx}行：{str(e)}")
+                    failed += 1
 
-                        self.db.add(participant)
-                        success += 1
-
-                    except Exception as e:
-                        errors.append(f"第{total + 1}行：{str(e)}")
-                        failed += 1
-
-                # 提交所有更改
-                if success > 0:
-                    self.db.commit()
+            if success > 0:
+                self.db.commit()
 
             return ParticipantBatchImportResult(
                 total=total,
                 success=success,
                 failed=failed,
-                errors=errors[:10]  # 只返回前10个错误
+                errors=errors[:10]
             )
 
         except Exception as e:

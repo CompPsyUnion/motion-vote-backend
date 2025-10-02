@@ -19,7 +19,7 @@ async def generate_participant_link(
     current_user: User = Depends(get_current_user)
 ):
     """获取参与者链接参数
-    
+
     返回参与者的活动ID和编号，用于前端构建链接
     """
     service = ParticipantService(db)
@@ -27,7 +27,7 @@ async def generate_participant_link(
         participant_id=participant_id,
         user_id=str(current_user.id)
     )
-    
+
     return {
         "success": True,
         "message": "链接生成成功",
@@ -47,7 +47,7 @@ async def generate_participant_qrcode(
         participant_id=participant_id,
         user_id=str(current_user.id)
     )
-    
+
     return Response(content=qrcode_data, media_type="image/png")
 
 

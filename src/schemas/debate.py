@@ -14,10 +14,13 @@ class DebateStatus(str, Enum):
 
 class DebateBase(BaseModel):
     title: str = Field(..., description="辩题标题")
-    pro_description: str = Field(..., alias="proDescription", description="正方观点描述")
-    con_description: str = Field(..., alias="conDescription", description="反方观点描述")
+    pro_description: str = Field(...,
+                                 alias="proDescription", description="正方观点描述")
+    con_description: str = Field(...,
+                                 alias="conDescription", description="反方观点描述")
     background: Optional[str] = Field(None, description="辩题背景介绍")
-    estimated_duration: Optional[int] = Field(None, alias="estimatedDuration", description="预计辩论时长（分钟）")
+    estimated_duration: Optional[int] = Field(
+        None, alias="estimatedDuration", description="预计辩论时长（分钟）")
 
     model_config = {"populate_by_name": True}
 
@@ -28,10 +31,13 @@ class DebateCreate(DebateBase):
 
 class DebateUpdate(BaseModel):
     title: Optional[str] = Field(None, description="辩题标题")
-    pro_description: Optional[str] = Field(None, alias="proDescription", description="正方观点描述")
-    con_description: Optional[str] = Field(None, alias="conDescription", description="反方观点描述")
+    pro_description: Optional[str] = Field(
+        None, alias="proDescription", description="正方观点描述")
+    con_description: Optional[str] = Field(
+        None, alias="conDescription", description="反方观点描述")
     background: Optional[str] = Field(None, description="辩题背景介绍")
-    estimated_duration: Optional[int] = Field(None, alias="estimatedDuration", description="预计辩论时长（分钟）")
+    estimated_duration: Optional[int] = Field(
+        None, alias="estimatedDuration", description="预计辩论时长（分钟）")
 
     model_config = {"populate_by_name": True}
 
@@ -51,7 +57,7 @@ class DebateReorder(BaseModel):
 
 class CurrentDebateUpdate(BaseModel):
     debate_id: str = Field(..., alias="debateId", description="当前辩题ID")
-    
+
     model_config = {"populate_by_name": True}
 
 

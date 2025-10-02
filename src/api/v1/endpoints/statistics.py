@@ -17,7 +17,7 @@ async def get_dashboard_data(
     current_user: User = Depends(get_current_user)
 ):
     """获取实时数据看板
-    
+
     返回活动的实时统计数据，包括参与人数、投票情况、辩题统计等信息
     """
     service = StatisticsService(db)
@@ -25,7 +25,7 @@ async def get_dashboard_data(
         activity_id=activity_id,
         user_id=str(current_user.id)
     )
-    
+
     return {
         "success": True,
         "message": "获取成功",
@@ -36,22 +36,23 @@ async def get_dashboard_data(
 @router.get("/{activity_id}/report", response_model=dict)
 async def get_activity_report(
     activity_id: str,
-    format: str = Query("json", description="报告格式", regex="^(json|pdf|excel)$"),
+    format: str = Query("json", description="报告格式",
+                        regex="^(json|pdf|excel)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """获取活动报告
-    
+
     返回活动的完整数据报告，包括活动摘要、辩题结果、投票时间线等信息
     """
     service = StatisticsService(db)
-    
+
     if format == "json":
         report_data = service.get_activity_report(
             activity_id=activity_id,
             user_id=str(current_user.id)
         )
-        
+
         return {
             "success": True,
             "message": "获取成功",
@@ -74,7 +75,7 @@ async def export_data(
     current_user: User = Depends(get_current_user)
 ):
     """导出原始数据
-    
+
     导出活动的原始投票数据为CSV格式
     """
     service = StatisticsService(db)
@@ -83,16 +84,16 @@ async def export_data(
         user_id=str(current_user.id),
         export_type=type
     )
-    
+
     # 生成文件名
     type_names = {
         ExportType.VOTES: "votes",
-        ExportType.CHANGES: "changes", 
+        ExportType.CHANGES: "changes",
         ExportType.TIMELINE: "timeline",
         ExportType.ALL: "all"
     }
     filename = f"activity_{activity_id}_{type_names.get(type, 'data')}.csv"
-    
+
     return Response(
         content=csv_data,
         media_type="text/csv",

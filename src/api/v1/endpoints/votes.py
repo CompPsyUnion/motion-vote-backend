@@ -29,7 +29,7 @@ async def participant_enter(
         participant_code=enter_data.participant_code,
         device_fingerprint=enter_data.device_fingerprint
     )
-    
+
     return {
         "success": True,
         "message": "入场成功",
@@ -50,7 +50,7 @@ async def vote_for_debate(
         session_token=vote_data.session_token,
         position=vote_data.position
     )
-    
+
     return {
         "success": True,
         "message": "投票成功",
@@ -70,7 +70,7 @@ async def get_vote_status(
         debate_id=debate_id,
         session_token=session_token
     )
-    
+
     return {
         "success": True,
         "message": "获取投票状态成功",
@@ -86,7 +86,7 @@ async def get_debate_results(
     """获取指定辩题的投票统计结果"""
     service = VoteService(db)
     results = service.get_debate_results(debate_id=debate_id)
-    
+
     return {
         "success": True,
         "message": "获取投票结果成功",

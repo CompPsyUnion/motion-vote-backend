@@ -15,7 +15,7 @@ class PaginatedResponse(BaseModel):
     page: int = Field(..., description="当前页码")
     limit: int = Field(..., description="每页数量")
     total_pages: int = Field(..., alias="totalPages", description="总页数")
-    
+
     class Config:
         populate_by_name = True
 
@@ -39,7 +39,7 @@ class FileUploadResponse(BaseModel):
     filename: str = Field(..., description="文件名")
     url: str = Field(..., description="文件URL")
     size: int = Field(..., description="文件大小")
-    
+
     class Config:
         populate_by_name = True
 
@@ -49,6 +49,6 @@ class BatchImportResult(BaseModel):
     error_count: int = Field(..., alias="errorCount", description="失败数量")
     errors: List[Dict[str, Any]] = Field(default=[], description="错误详情")
     total: int = Field(..., description="总数量")
-    
+
     class Config:
         populate_by_name = True

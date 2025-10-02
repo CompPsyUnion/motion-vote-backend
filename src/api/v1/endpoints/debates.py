@@ -59,17 +59,18 @@ def check_activity_permission(
 def get_debate_vote_stats(debate_id: str, db: Session) -> VoteStats:
     """获取辩题投票统计"""
     # 分别统计各种投票数量 - 使用更简单的查询方法
-    total_votes = db.query(func.count(Vote.id)).filter(Vote.debate_id == debate_id).scalar() or 0
+    total_votes = db.query(func.count(Vote.id)).filter(
+        Vote.debate_id == debate_id).scalar() or 0
     pro_votes = db.query(func.count(Vote.id)).filter(
-        Vote.debate_id == debate_id, 
+        Vote.debate_id == debate_id,
         Vote.position == VotePosition.pro
     ).scalar() or 0
     con_votes = db.query(func.count(Vote.id)).filter(
-        Vote.debate_id == debate_id, 
+        Vote.debate_id == debate_id,
         Vote.position == VotePosition.con
     ).scalar() or 0
     abstain_votes = db.query(func.count(Vote.id)).filter(
-        Vote.debate_id == debate_id, 
+        Vote.debate_id == debate_id,
         Vote.position == VotePosition.abstain
     ).scalar() or 0
 
@@ -93,17 +94,21 @@ def get_debate_vote_stats(debate_id: str, db: Session) -> VoteStats:
 @router.get("/activities/{activity_id}/debates")
 async def get_debates(
     activity_id: str,
-    search: Optional[str] = Query(default=None, description="搜索关键词 - 支持辩题标题、描述模糊匹配"),
-    status: Optional[str] = Query(default=None, description="辩题状态筛选 (draft|active|locked|archived)"),
+    search: Optional[str] = Query(
+        default=None, description="搜索关键词 - 支持辩题标题、描述模糊匹配"),
+    status: Optional[str] = Query(
+        default=None, description="辩题状态筛选 (draft|active|locked|archived)"),
     page: int = Query(default=1, ge=1, description="页码"),
     limit: int = Query(default=50, ge=1, le=100, description="每页数量"),
-    sort_by: Optional[str] = Query(default="order", description="排序字段 (order|created_at|title)"),
-    sort_order: Optional[str] = Query(default="asc", description="排序方向 (asc|desc)"),
+    sort_by: Optional[str] = Query(
+        default="order", description="排序字段 (order|created_at|title)"),
+    sort_order: Optional[str] = Query(
+        default="asc", description="排序方向 (asc|desc)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """获取辩题列表
-    
+
     支持多种筛选和搜索方式：
     - search: 全文搜索(标题、描述)
     - status: 状态筛选
@@ -119,7 +124,7 @@ async def get_debates(
 
     # 构建查询
     query = db.query(Debate).filter(Debate.activity_id == activity_id)
-    
+
     # 搜索筛选
     if search and search.strip():
         search_terms = search.strip().split()
@@ -134,7 +139,7 @@ async def get_debates(
             )
         if search_conditions:
             query = query.filter(*search_conditions)
-    
+
     # 状态筛选
     if status and status.strip():
         try:
@@ -143,7 +148,7 @@ async def get_debates(
             query = query.filter(Debate.status == status_enum)
         except ValueError:
             pass  # 忽略无效状态
-    
+
     # 排序
     sort_column = Debate.order  # 默认按order排序
     if sort_by == "created_at":
@@ -152,19 +157,19 @@ async def get_debates(
         sort_column = Debate.title
     elif sort_by == "order":
         sort_column = Debate.order
-    
+
     if sort_order == "desc":
         query = query.order_by(desc(sort_column))
     else:
         query = query.order_by(asc(sort_column))
-    
+
     # 分页
     total = query.count()
     debates = query.offset((page - 1) * limit).limit(limit).all()
 
     # 转换为响应格式
     debate_list = [DebateResponse.model_validate(debate) for debate in debates]
-    
+
     return {
         "success": True,
         "message": "获取辩题列表成功",
@@ -208,7 +213,7 @@ async def create_debate(
 
     # 转换为响应格式
     debate_response = DebateResponse.model_validate(debate)
-    
+
     return {
         "success": True,
         "message": "创建辩题成功",
@@ -235,7 +240,7 @@ async def get_debate_detail(
         **debate_dict,
         vote_stats=vote_stats
     )
-    
+
     return {
         "success": True,
         "message": "获取辩题详情成功",
@@ -261,18 +266,19 @@ async def update_debate(
 
     # 更新字段
     update_data = debate_data.model_dump(exclude_unset=True)
-    
+
     # 逐个更新字段以避免类型问题
     if update_data:
         for field, value in update_data.items():
             if hasattr(debate, field):
-                db.query(Debate).filter(Debate.id == debate_id).update({field: value})
-    
+                db.query(Debate).filter(
+                    Debate.id == debate_id).update({field: value})
+
     db.commit()
-    
+
     # 重新获取更新后的辩题
     updated_debate = db.query(Debate).filter(Debate.id == debate_id).first()
-    
+
     return {
         "success": True,
         "message": "更新辩题成功"
@@ -295,7 +301,8 @@ async def delete_debate(
         str(debate.activity_id), str(current_user.id), "edit", db)
 
     # 检查是否为当前辩题
-    activity = db.query(Activity).filter(Activity.id == debate.activity_id).first()
+    activity = db.query(Activity).filter(
+        Activity.id == debate.activity_id).first()
     current_debate_id = getattr(activity, 'current_debate_id')
     if current_debate_id and str(current_debate_id) == str(debate_id):
         # 清除当前辩题
@@ -359,7 +366,8 @@ async def reorder_debates(
 
     # 批量更新顺序
     for item in reorder_data.debates:
-        db.query(Debate).filter(Debate.id == item.id).update({"order": item.order})
+        db.query(Debate).filter(Debate.id == item.id).update(
+            {"order": item.order})
 
     db.commit()
     return {
@@ -395,7 +403,7 @@ async def get_current_debate(
         **debate_dict,
         vote_stats=vote_stats
     )
-    
+
     return {
         "success": True,
         "message": "获取当前辩题成功",

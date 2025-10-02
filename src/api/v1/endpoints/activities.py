@@ -26,21 +26,28 @@ router = APIRouter()
 async def get_activities(
     page: int = Query(default=1, ge=1, description="页码"),
     limit: int = Query(default=20, ge=1, le=100, description="每页数量"),
-    status: Optional[str] = Query(default=None, description="活动状态筛选 (upcoming|ongoing|ended)"),
-    role: Optional[str] = Query(default=None, description="用户角色筛选 (owner|collaborator)"),
-    search: Optional[str] = Query(default=None, description="搜索关键词 - 支持活动名称、描述、地址模糊匹配"),
+    status: Optional[str] = Query(
+        default=None, description="活动状态筛选 (upcoming|ongoing|ended)"),
+    role: Optional[str] = Query(
+        default=None, description="用户角色筛选 (owner|collaborator)"),
+    search: Optional[str] = Query(
+        default=None, description="搜索关键词 - 支持活动名称、描述、地址模糊匹配"),
     name: Optional[str] = Query(default=None, description="活动名称模糊匹配"),
     location: Optional[str] = Query(default=None, description="活动地址模糊匹配"),
     tags: Optional[str] = Query(default=None, description="标签搜索，多个标签用逗号分隔"),
-    date_from: Optional[str] = Query(default=None, description="开始时间筛选 (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(default=None, description="结束时间筛选 (YYYY-MM-DD)"),
-    sort_by: Optional[str] = Query(default="created_at", description="排序字段 (created_at|name|start_time)"),
-    sort_order: Optional[str] = Query(default="desc", description="排序方向 (asc|desc)"),
+    date_from: Optional[str] = Query(
+        default=None, description="开始时间筛选 (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(
+        default=None, description="结束时间筛选 (YYYY-MM-DD)"),
+    sort_by: Optional[str] = Query(
+        default="created_at", description="排序字段 (created_at|name|start_time)"),
+    sort_order: Optional[str] = Query(
+        default="desc", description="排序方向 (asc|desc)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """获取用户创建和参与的活动列表
-    
+
     支持多种筛选和搜索方式：
     - search: 全文搜索(名称、描述、地址)
     - name: 活动名称模糊匹配
@@ -63,7 +70,7 @@ async def get_activities(
         if tags:
             search_parts.extend(tags.split(','))
         enhanced_search = ' '.join(search_parts)
-    
+
     return service.get_activities_paginated(
         user_id=str(current_user.id),
         page=page,
@@ -178,7 +185,8 @@ async def remove_collaborator(
 ):
     """从活动中移除协作者"""
     service = ActivityService(db)
-    service.remove_collaborator(activity_id, collaborator_id, str(current_user.id))
+    service.remove_collaborator(
+        activity_id, collaborator_id, str(current_user.id))
     return ApiResponse(
         message="Collaborator removed successfully"
     )

@@ -46,9 +46,10 @@ class UserLogin(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str = Field(..., alias="accessToken", description="访问令牌")
     refresh_token: str = Field(..., alias="refreshToken", description="刷新令牌")
-    token_type: str = Field(default="bearer", alias="tokenType", description="令牌类型")
+    token_type: str = Field(
+        default="bearer", alias="tokenType", description="令牌类型")
     expires_in: int = Field(..., alias="expiresIn", description="令牌有效期（秒）")
-    
+
     class Config:
         populate_by_name = True
 

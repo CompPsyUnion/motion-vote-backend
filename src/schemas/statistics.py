@@ -27,9 +27,12 @@ class RecentActivity(BaseModel):
 
 class RealTimeStats(BaseModel):
     """实时统计数据"""
-    total_participants: int = Field(..., alias="totalParticipants", description="总参与人数")
-    checked_in_participants: int = Field(..., alias="checkedInParticipants", description="已入场人数")
-    online_participants: int = Field(..., alias="onlineParticipants", description="在线人数")
+    total_participants: int = Field(...,
+                                    alias="totalParticipants", description="总参与人数")
+    checked_in_participants: int = Field(...,
+                                         alias="checkedInParticipants", description="已入场人数")
+    online_participants: int = Field(...,
+                                     alias="onlineParticipants", description="在线人数")
     total_votes: int = Field(..., alias="totalVotes", description="总投票数")
     vote_rate: float = Field(..., alias="voteRate", description="投票率")
 
@@ -52,7 +55,8 @@ class DebateStats(BaseModel):
     """辩题统计数据"""
     debate_id: str = Field(..., alias="debateId", description="辩题ID")
     debate_title: str = Field(..., alias="debateTitle", description="辩题标题")
-    vote_results: VoteResults = Field(..., alias="voteResults", description="投票结果")
+    vote_results: VoteResults = Field(...,
+                                      alias="voteResults", description="投票结果")
     vote_rate: float = Field(..., alias="voteRate", description="投票率")
 
     class Config:
@@ -63,11 +67,16 @@ class DashboardData(BaseModel):
     """实时数据看板"""
     activity_id: str = Field(..., alias="activityId", description="活动ID")
     activity_name: str = Field(..., alias="activityName", description="活动名称")
-    activity_status: str = Field(..., alias="activityStatus", description="活动状态")
-    current_debate: Optional[str] = Field(None, alias="currentDebate", description="当前辩题")
-    real_time_stats: RealTimeStats = Field(..., alias="realTimeStats", description="实时统计数据")
-    debate_stats: List[DebateStats] = Field(..., alias="debateStats", description="辩题统计")
-    recent_activity: List[RecentActivity] = Field(..., alias="recentActivity", description="最近活动")
+    activity_status: str = Field(...,
+                                 alias="activityStatus", description="活动状态")
+    current_debate: Optional[str] = Field(
+        None, alias="currentDebate", description="当前辩题")
+    real_time_stats: RealTimeStats = Field(...,
+                                           alias="realTimeStats", description="实时统计数据")
+    debate_stats: List[DebateStats] = Field(...,
+                                            alias="debateStats", description="辩题统计")
+    recent_activity: List[RecentActivity] = Field(
+        ..., alias="recentActivity", description="最近活动")
 
     class Config:
         populate_by_name = True
@@ -99,10 +108,12 @@ class DebateResult(BaseModel):
 
 class ActivitySummary(BaseModel):
     """活动摘要"""
-    total_participants: int = Field(..., alias="totalParticipants", description="总参与人数")
+    total_participants: int = Field(...,
+                                    alias="totalParticipants", description="总参与人数")
     total_votes: int = Field(..., alias="totalVotes", description="总投票数")
     total_debates: int = Field(..., alias="totalDebates", description="辩题总数")
-    average_vote_rate: float = Field(..., alias="averageVoteRate", description="平均投票率")
+    average_vote_rate: float = Field(...,
+                                     alias="averageVoteRate", description="平均投票率")
     duration: int = Field(..., description="活动时长（分钟）")
 
     class Config:
@@ -114,11 +125,15 @@ class ActivityReport(BaseModel):
     activity_id: str = Field(..., alias="activityId", description="活动ID")
     activity_name: str = Field(..., alias="activityName", description="活动名称")
     created_at: datetime = Field(..., alias="createdAt", description="创建时间")
-    started_at: Optional[datetime] = Field(None, alias="startedAt", description="开始时间")
-    ended_at: Optional[datetime] = Field(None, alias="endedAt", description="结束时间")
+    started_at: Optional[datetime] = Field(
+        None, alias="startedAt", description="开始时间")
+    ended_at: Optional[datetime] = Field(
+        None, alias="endedAt", description="结束时间")
     summary: ActivitySummary = Field(..., description="活动摘要")
-    debate_results: List[DebateResult] = Field(..., alias="debateResults", description="辩题结果")
-    generated_at: datetime = Field(..., alias="generatedAt", description="报告生成时间")
+    debate_results: List[DebateResult] = Field(
+        ..., alias="debateResults", description="辩题结果")
+    generated_at: datetime = Field(...,
+                                   alias="generatedAt", description="报告生成时间")
 
     class Config:
         populate_by_name = True

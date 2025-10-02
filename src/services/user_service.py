@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from src.core.exceptions import NotFoundError
 from src.models.user import User
 from src.schemas.base import PaginatedResponse
-from src.schemas.user import UserUpdate, UserResponse
+from src.schemas.user import UserResponse, UserUpdate
 
 
 class UserService:
@@ -45,7 +45,8 @@ class UserService:
         users = query.offset(offset).limit(limit).all()
 
         return PaginatedResponse(
-            items=[UserResponse.model_validate(user) for user in users],
+            items=[UserResponse.model_validate(
+                user).model_dump() for user in users],
             total=total,
             page=page,
             limit=limit,

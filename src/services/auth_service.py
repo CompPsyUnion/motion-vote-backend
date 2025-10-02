@@ -5,7 +5,7 @@ from src.core.auth import (create_access_token, create_refresh_token,
 from src.core.exceptions import (AuthenticationError, BusinessError,
                                  ValidationError)
 from src.models.user import User
-from src.schemas.user import TokenResponse, UserCreate, UserLogin
+from src.schemas.user import TokenResponse, UserCreate, UserLogin, UserRole
 
 
 class AuthService:
@@ -20,6 +20,10 @@ class AuthService:
         if existing_user:
             raise ValidationError("邮箱已存在")
 
+        # 检查是否是第一个用户，如果是则设为管理员
+        user_count = self.db.query(User).count()
+        user_role = UserRole.admin if user_count == 0 else UserRole.organizer
+
         # 创建新用户
         hashed_password = get_password_hash(user_data.password)
         db_user = User(
@@ -27,6 +31,7 @@ class AuthService:
             name=user_data.name,
             phone=user_data.phone,
             avatar=user_data.avatar,
+            role=user_role,
             hashed_password=hashed_password
         )
 
@@ -52,9 +57,9 @@ class AuthService:
         refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
         return TokenResponse(
-            accessToken=access_token,
-            refreshToken=refresh_token,
-            expiresIn=settings.access_token_expire_minutes * 60
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=settings.access_token_expire_minutes * 60
         )
 
     async def refresh_token(self, refresh_token: str) -> TokenResponse:

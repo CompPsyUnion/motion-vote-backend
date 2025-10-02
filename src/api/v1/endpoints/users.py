@@ -18,7 +18,21 @@ async def get_profile(
     db: Session = Depends(get_db)
 ):
     """获取用户信息"""
-    return UserResponse.model_validate(current_user)
+    try:
+        return UserResponse.model_validate(current_user)
+    except Exception as e:
+        # 如果验证失败，创建字典并转换
+        user_dict = {
+            "id": str(current_user.id),
+            "email": current_user.email,
+            "name": current_user.name,
+            "phone": current_user.phone,
+            "avatar": current_user.avatar,
+            "role": current_user.role,
+            "created_at": current_user.created_at,
+            "updated_at": current_user.updated_at
+        }
+        return UserResponse(**user_dict)
 
 
 @router.put("/profile", response_model=ApiResponse)

@@ -1,19 +1,17 @@
 import csv
 import io
+from datetime import datetime, timezone
 from typing import Optional
-from datetime import datetime
 
 from fastapi import HTTPException, UploadFile
 from openpyxl import load_workbook
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
-
 from src.models.activity import Activity
 from src.models.vote import Participant
-from src.schemas.participant import (
-    ParticipantCreate, ParticipantResponse,
-    PaginatedParticipants, ParticipantBatchImportResult
-)
+from src.schemas.participant import (PaginatedParticipants,
+                                     ParticipantBatchImportResult,
+                                     ParticipantCreate, ParticipantResponse)
 
 
 class ParticipantService:
@@ -344,7 +342,7 @@ class ParticipantService:
         # 注意：这里不直接修改SQLAlchemy对象的属性，而是使用update方法
         self.db.query(Participant).filter(Participant.id == participant.id).update({
             "checked_in": True,
-            "checked_in_at": datetime.utcnow(),
+            "checked_in_at": datetime.now(timezone.utc),
             "device_fingerprint": device_fingerprint
         })
         self.db.commit()

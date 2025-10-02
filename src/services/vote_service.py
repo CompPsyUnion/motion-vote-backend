@@ -9,20 +9,17 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-from sqlalchemy.orm import Session
-from sqlalchemy import text
 from fastapi import HTTPException
-
-from src.models.vote import Participant, Vote, VoteHistory
-from src.models.debate import Debate
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from src.models.activity import Activity
-from src.schemas.vote import (
-    VotePosition, VoteStatus, VoteResults,
-    ParticipantInfo, ActivityInfo
-)
+from src.models.debate import Debate
+from src.models.vote import Participant, Vote, VoteHistory
 from src.schemas.debate import DebateStatus
+from src.schemas.vote import (ActivityInfo, ParticipantInfo, VotePosition,
+                              VoteResults, VoteStatus)
 
 
 class VoteService:
@@ -292,21 +289,21 @@ class VoteService:
             )
             
             return VoteStatus(
-                has_voted=True,
+                hasVoted=True,
                 position=VotePosition(getattr(vote, 'position', 'abstain')),
-                voted_at=getattr(vote, 'created_at'),
-                remaining_changes=remaining_changes,
-                can_vote=False,  # 已投票
-                can_change=can_change
+                votedAt=getattr(vote, 'created_at'),
+                remainingChanges=remaining_changes,
+                canVote=False,  # 已投票
+                canChange=can_change
             )
         else:
             return VoteStatus(
-                has_voted=False,
+                hasVoted=False,
                 position=None,
-                voted_at=None,
-                remaining_changes=max_vote_changes,
-                can_vote=str(debate.status) in ["active", "draft"],
-                can_change=False  # 未投票，无法改票
+                votedAt=None,
+                remainingChanges=max_vote_changes,
+                canVote=str(debate.status) in ["active", "draft"],
+                canChange=False  # 未投票，无法改票
             )
     
     def get_debate_results(self, debate_id: str) -> VoteResults:
@@ -352,14 +349,14 @@ class VoteService:
         locked_at = getattr(debate, 'updated_at') if is_locked else None
         
         return VoteResults(
-            debate_id=debate_id,
-            total_votes=total_votes,
-            pro_votes=pro_votes,
-            con_votes=con_votes,
-            abstain_votes=abstain_votes,
-            pro_percentage=round(pro_percentage, 2),
-            con_percentage=round(con_percentage, 2),
-            abstain_percentage=round(abstain_percentage, 2),
+            debateId=debate_id,
+            totalVotes=total_votes,
+            proVotes=pro_votes,
+            conVotes=con_votes,
+            abstainVotes=abstain_votes,
+            proPercentage=round(pro_percentage, 2),
+            conPercentage=round(con_percentage, 2),
+            abstainPercentage=round(abstain_percentage, 2),
             winner=winner,
             is_locked=is_locked,
             locked_at=locked_at

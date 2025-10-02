@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -111,8 +111,9 @@ async def get_debates(
     - sort_by/sort_order: 自定义排序
     """
     from math import ceil
-    from sqlalchemy import or_, desc, asc
-    
+
+    from sqlalchemy import asc, desc, or_
+
     # 检查权限
     check_activity_permission(activity_id, str(current_user.id), "view", db)
 

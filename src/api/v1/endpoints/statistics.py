@@ -1,11 +1,10 @@
 """统计数据相关的 API 端点"""
 
-from fastapi import APIRouter, Depends, Response, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
-
 from src.api.dependencies import get_current_user, get_db
 from src.models.user import User
-from src.schemas.statistics import DashboardData, ActivityReport, ExportType
+from src.schemas.statistics import ExportType
 from src.services.statistics_service import StatisticsService
 
 router = APIRouter()

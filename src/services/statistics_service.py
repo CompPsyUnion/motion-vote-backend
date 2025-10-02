@@ -2,21 +2,19 @@
 
 import csv
 import io
-from datetime import datetime, timedelta
-from typing import List, Optional
+from datetime import datetime, timezone
+from typing import List
 
 from fastapi import HTTPException
-from sqlalchemy import and_, func, desc
+from sqlalchemy import and_, desc, func
 from sqlalchemy.orm import Session
-
 from src.models.activity import Activity
 from src.models.debate import Debate
 from src.models.vote import Participant, Vote
-from src.schemas.statistics import (
-    DashboardData, ActivityReport, RealTimeStats,
-    DebateStats, VoteResults, RecentActivity, ActivityType,
-    DebateResult, TimelinePoint, ActivitySummary, ExportType
-)
+from src.schemas.statistics import (ActivityReport, ActivitySummary,
+                                    ActivityType, DashboardData, DebateResult,
+                                    DebateStats, ExportType, RealTimeStats,
+                                    RecentActivity, TimelinePoint, VoteResults)
 
 
 class StatisticsService:
@@ -198,7 +196,7 @@ class StatisticsService:
             if participant and debate:
                 activities.append(RecentActivity(
                     type=ActivityType.VOTE_CAST,
-                    timestamp=vote.created_at,
+                    timestamp=getattr(vote, 'created_at', datetime.min) if getattr(vote, 'created_at', None) is not None else datetime.min,
                     description=f"参与者 {participant.code} 对辩题「{debate.title}」投票：{vote.position}"
                 ))
         
@@ -218,12 +216,12 @@ class StatisticsService:
         return ActivityReport(
             activityId=str(activity.id),
             activityName=str(activity.name),
-            createdAt=activity.created_at,
-            startedAt=activity.start_time,
-            endedAt=activity.end_time,
+            createdAt=getattr(activity, 'created_at', datetime.min) if getattr(activity, 'created_at', None) is not None else datetime.min,
+            startedAt=getattr(activity, 'start_time', None),
+            endedAt=getattr(activity, 'end_time', None),
             summary=summary,
             debateResults=debate_results,
-            generatedAt=datetime.utcnow()
+            generatedAt=datetime.now(timezone.utc)
         )
 
     def _get_activity_summary(self, activity_id: str) -> ActivitySummary:
@@ -279,15 +277,19 @@ class StatisticsService:
             # TODO: 辩题模型中没有started_at和ended_at字段，使用预估时长
             duration = 0
             if hasattr(debate, 'estimated_duration') and debate.estimated_duration is not None:
-                duration = debate.estimated_duration
+                # If estimated_duration is a SQLAlchemy Column, get its value
+                if hasattr(debate.estimated_duration, 'value'):
+                    duration = debate.estimated_duration.value
+                else:
+                    duration = debate.estimated_duration
             
             results.append(DebateResult(
                 debateId=str(debate.id),
                 debateTitle=str(debate.title),
-                debateOrder=debate.order,
+                debateOrder=int(getattr(debate, "order", 0)),
                 results=vote_results,
                 timeline=timeline,
-                duration=duration
+                duration=int(duration) if isinstance(duration, (int, float, str)) else 0
             ))
         
         return results
@@ -305,15 +307,15 @@ class StatisticsService:
         abstain_count = 0
         
         for vote in votes:
-            if vote.position == 'pro':
+            if getattr(vote, 'position', None) == 'pro':
                 pro_count += 1
-            elif vote.position == 'con':
+            elif getattr(vote, 'position', None) == 'con':
                 con_count += 1
-            elif vote.position == 'abstain':
+            elif getattr(vote, 'position', None) == 'abstain':
                 abstain_count += 1
             
             timeline.append(TimelinePoint(
-                timestamp=vote.created_at,
+                timestamp=getattr(vote, 'created_at', datetime.min) if getattr(vote, 'created_at', None) is not None else datetime.min,
                 proVotes=pro_count,
                 conVotes=con_count,
                 abstainVotes=abstain_count

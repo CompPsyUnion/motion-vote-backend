@@ -1,11 +1,11 @@
 from sqlalchemy.orm import Session
-from typing import Optional
-from src.models.user import User
-from src.schemas.user import UserCreate, UserLogin, UserUpdate, TokenResponse
-from src.core.auth import verify_password, get_password_hash, create_access_token, create_refresh_token
-from src.core.exceptions import AuthenticationError, ValidationError, BusinessError
-from datetime import timedelta
 from src.config import settings
+from src.core.auth import (create_access_token, create_refresh_token,
+                           get_password_hash, verify_password)
+from src.core.exceptions import (AuthenticationError, BusinessError,
+                                 ValidationError)
+from src.models.user import User
+from src.schemas.user import TokenResponse, UserCreate, UserLogin
 
 
 class AuthService:
@@ -52,9 +52,9 @@ class AuthService:
         refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
         return TokenResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_in=settings.access_token_expire_minutes * 60
+            accessToken=access_token,
+            refreshToken=refresh_token,
+            expiresIn=settings.access_token_expire_minutes * 60
         )
 
     async def refresh_token(self, refresh_token: str) -> TokenResponse:

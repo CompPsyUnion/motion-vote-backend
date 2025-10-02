@@ -7,20 +7,11 @@
 - 获取投票结果
 """
 
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-
 from src.api.dependencies import get_db
-from src.models.vote import Participant, Vote
-from src.models.debate import Debate
-from src.models.activity import Activity
-from src.schemas.vote import (
-    VoteRequest, VoteStatus, VoteResults, VotePosition,
-    ParticipantEnter, ParticipantInfo, ActivityInfo
-)
-from src.schemas.base import ApiResponse
+from src.schemas.vote import ParticipantEnter, VoteRequest
 from src.services.vote_service import VoteService
 
 router = APIRouter()

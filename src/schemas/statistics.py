@@ -1,8 +1,8 @@
 """统计数据相关的 Pydantic 模型"""
 
 from datetime import datetime
-from typing import List, Optional
 from enum import Enum
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 

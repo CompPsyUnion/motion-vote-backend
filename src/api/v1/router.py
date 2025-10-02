@@ -1,6 +1,7 @@
 from fastapi import APIRouter
-
-from src.api.v1.endpoints import auth, users, activities, debates, participants, participant_resources, votes, screen, statistics
+from src.api.v1.endpoints import (activities, auth, debates,
+                                  participant_resources, participants, screen,
+                                  statistics, users, votes)
 
 api_router = APIRouter()
 

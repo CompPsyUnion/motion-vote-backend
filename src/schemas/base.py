@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
@@ -32,7 +32,7 @@ class ErrorResponse(BaseModel):
     message: str = Field(..., description="错误消息")
     code: str = Field(..., description="错误代码")
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="错误时间戳")
+        default_factory=lambda: datetime.now(timezone.utc), description="错误时间戳")
 
 
 class FileUploadResponse(BaseModel):

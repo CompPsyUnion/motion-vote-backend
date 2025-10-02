@@ -12,20 +12,19 @@ from math import ceil
 from typing import List, Optional
 from uuid import uuid4
 
-from sqlalchemy import and_, or_, select, text, union_all
-from sqlalchemy.orm import Session, selectinload
 from fastapi import HTTPException
-
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session, selectinload
 from src.models.activity import Activity, Collaborator
-from src.models.user import User
 from src.models.debate import Debate
+from src.models.user import User
 from src.models.vote import Vote
-from src.schemas.activity import (
-    ActivityCreate, ActivityUpdate, ActivityResponse, ActivityDetail,
-    ActivityStatus, CollaboratorInvite, CollaboratorUpdate, 
-    CollaboratorResponse, CollaboratorStatus, CollaboratorPermission,
-    PaginatedActivities, ActivityDetailStatistics, UserInfo
-)
+from src.schemas.activity import (ActivityCreate, ActivityDetail,
+                                  ActivityDetailStatistics, ActivityResponse,
+                                  ActivityStatus, ActivityUpdate,
+                                  CollaboratorInvite, CollaboratorPermission,
+                                  CollaboratorResponse, CollaboratorStatus,
+                                  CollaboratorUpdate, PaginatedActivities)
 
 
 class ActivityService:

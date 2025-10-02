@@ -10,17 +10,14 @@
 import io
 from typing import Optional, Union
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-
 from src.api.dependencies import get_current_user, get_db
 from src.models.user import User
-from src.schemas.base import ApiResponse
-from src.schemas.participant import (
-    ParticipantCreate, ParticipantResponse, PaginatedParticipants,
-    ParticipantBatchImportResult, ParticipantEnter
-)
+from src.schemas.participant import (PaginatedParticipants,
+                                     ParticipantBatchImportResult,
+                                     ParticipantCreate, ParticipantResponse)
 from src.services.participant_service import ParticipantService
 
 router = APIRouter()

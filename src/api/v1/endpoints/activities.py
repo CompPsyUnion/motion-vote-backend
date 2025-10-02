@@ -10,14 +10,12 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-
 from src.api.dependencies import get_current_user, get_db
 from src.models.user import User
-from src.schemas.activity import (
-    ActivityCreate, ActivityResponse, ActivityDetail, ActivityUpdate,
-    CollaboratorInvite, CollaboratorResponse, CollaboratorUpdate,
-    PaginatedActivities
-)
+from src.schemas.activity import (ActivityCreate, ActivityDetail,
+                                  ActivityResponse, ActivityUpdate,
+                                  CollaboratorInvite, CollaboratorResponse,
+                                  CollaboratorUpdate, PaginatedActivities)
 from src.schemas.base import ApiResponse
 from src.services.activity_service import ActivityService
 

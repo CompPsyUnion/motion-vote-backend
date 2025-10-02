@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from sqlalchemy.orm import Session
 from src.core.exceptions import NotFoundError
@@ -49,5 +49,5 @@ class UserService:
             total=total,
             page=page,
             limit=limit,
-            total_pages=(total + limit - 1) // limit
+            totalPages=(total + limit - 1) // limit
         )

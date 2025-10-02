@@ -5,10 +5,8 @@
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
-
 from src.api.dependencies import get_current_user, get_db
 from src.models.user import User
-from src.schemas.participant import ParticipantEnter, ParticipantLinksResponse
 from src.services.participant_service import ParticipantService
 
 router = APIRouter()

@@ -1,4 +1,5 @@
 """基于Redis的验证码服务"""
+import inspect
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -36,8 +37,10 @@ class RedisVerificationCodeService:
 
         # 检查频率限制
         rate_limit_key = self._get_rate_limit_key(email, purpose)
-        if await self.redis.exists(rate_limit_key):
-            ttl_result = await self.redis.ttl(rate_limit_key)
+        if self.redis.exists(rate_limit_key):
+            ttl_result = self.redis.ttl(rate_limit_key)
+            if inspect.isawaitable(ttl_result):
+                ttl_result = await ttl_result
             ttl = int(ttl_result) if ttl_result and int(ttl_result) > 0 else 0
             raise ValidationError(f"请等待 {ttl} 秒后再重新发送验证码")
 

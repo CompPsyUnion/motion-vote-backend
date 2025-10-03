@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from src.core.database import Base
@@ -16,6 +16,7 @@ class EmailVerification(Base):
     purpose = Column(String, nullable=False, default="register")
     used = Column(Boolean, default=False)
     expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(
+        timezone.utc).replace(tzinfo=None))
     used_at = Column(DateTime, nullable=True)
     attempts = Column(Integer, default=0)  # 验证尝试次数

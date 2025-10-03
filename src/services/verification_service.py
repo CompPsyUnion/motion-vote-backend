@@ -26,13 +26,15 @@ class VerificationCodeService:
             EmailVerification.email == email,
             EmailVerification.purpose == purpose,
             EmailVerification.used == False,
-            EmailVerification.expires_at > datetime.now(timezone.utc)
+            EmailVerification.expires_at > datetime.now(
+                timezone.utc).replace(tzinfo=None)
         ).first()
 
         if existing_code:
             # 检查重发间隔
+            created_at = cast(datetime, getattr(existing_code, "created_at"))
             time_since_sent = datetime.now(
-                timezone.utc) - existing_code.created_at
+                timezone.utc).replace(tzinfo=None) - created_at
             if time_since_sent.total_seconds() < self.resend_interval_seconds:
                 remaining_seconds = self.resend_interval_seconds - \
                     int(time_since_sent.total_seconds())
@@ -41,7 +43,7 @@ class VerificationCodeService:
         # 生成新的验证码和session
         code = self.email_service.generate_verification_code()
         session = str(uuid.uuid4())
-        expires_at = datetime.now(timezone.utc) + \
+        expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + \
             timedelta(minutes=self.code_expire_minutes)
 
         # 发送邮件
@@ -91,7 +93,7 @@ class VerificationCodeService:
 
         # 检查是否过期
         expires_at = getattr(verification, "expires_at", None)
-        if expires_at is not None and expires_at < datetime.now(timezone.utc):
+        if expires_at is not None and expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
             raise ValidationError("验证码已过期")
 
         # 检查尝试次数 (将可能的 ORM 列值转换为 Python int 以供比较)
@@ -114,7 +116,8 @@ class VerificationCodeService:
 
         # 验证成功，标记为已使用
         setattr(verification, "used", True)
-        setattr(verification, "used_at", datetime.now(timezone.utc))
+        setattr(verification, "used_at", datetime.now(
+            timezone.utc).replace(tzinfo=None))
         self.db.commit()
 
         return True
@@ -122,6 +125,7 @@ class VerificationCodeService:
     def cleanup_expired_codes(self):
         """清理过期的验证码"""
         self.db.query(EmailVerification).filter(
-            EmailVerification.expires_at < datetime.now(timezone.utc)
+            EmailVerification.expires_at < datetime.now(
+                timezone.utc).replace(tzinfo=None)
         ).delete()
         self.db.commit()

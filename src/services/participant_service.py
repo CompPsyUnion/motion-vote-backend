@@ -185,7 +185,8 @@ class ParticipantService:
 
                 total += 1
                 name = str(row[0]).strip() if row[0] else ""
-                phone = str(row[1]).strip() if len(row) > 1 and row[1] else None
+                phone = str(row[1]).strip() if len(
+                    row) > 1 and row[1] else None
                 note = str(row[2]).strip() if len(row) > 2 and row[2] else None
 
                 if not name:

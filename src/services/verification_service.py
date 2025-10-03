@@ -26,12 +26,13 @@ class VerificationCodeService:
             EmailVerification.email == email,
             EmailVerification.purpose == purpose,
             EmailVerification.used == False,
-            EmailVerification.expires_at > datetime.utcnow()
+            EmailVerification.expires_at > datetime.now(timezone.utc)
         ).first()
 
         if existing_code:
             # 检查重发间隔
-            time_since_sent = datetime.utcnow() - existing_code.created_at
+            time_since_sent = datetime.now(
+                timezone.utc) - existing_code.created_at
             if time_since_sent.total_seconds() < self.resend_interval_seconds:
                 remaining_seconds = self.resend_interval_seconds - \
                     int(time_since_sent.total_seconds())
@@ -40,7 +41,8 @@ class VerificationCodeService:
         # 生成新的验证码和session
         code = self.email_service.generate_verification_code()
         session = str(uuid.uuid4())
-        expires_at = datetime.utcnow() + timedelta(minutes=self.code_expire_minutes)
+        expires_at = datetime.now(timezone.utc) + \
+            timedelta(minutes=self.code_expire_minutes)
 
         # 发送邮件
         email_result = await self.email_service.send_verification_code(email, code, purpose)
@@ -120,6 +122,6 @@ class VerificationCodeService:
     def cleanup_expired_codes(self):
         """清理过期的验证码"""
         self.db.query(EmailVerification).filter(
-            EmailVerification.expires_at < datetime.utcnow()
+            EmailVerification.expires_at < datetime.now(timezone.utc)
         ).delete()
         self.db.commit()

@@ -5,23 +5,38 @@ from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from src.core.database import get_db
 from src.schemas.base import ApiResponse
-from src.schemas.user import (PasswordReset, TokenResponse, UserCreate,
-                              UserLogin)
+from src.schemas.email_verification import EmailVerificationResponse
+from src.schemas.user import (PasswordReset, RegisterResponse, TokenResponse,
+                              UserCreate, UserLogin)
 from src.services.auth_service import AuthService
+from src.services.verification_service import VerificationCodeService
 
 router = APIRouter()
 security = HTTPBearer()
 
 
-@router.post("/register", response_model=ApiResponse, status_code=HTTPStatus.CREATED)
+@router.get("/getcode", response_model=EmailVerificationResponse)
+async def get_verification_code(
+    email: str,
+    db: Session = Depends(get_db)
+):
+    """获取验证码"""
+    verification_service = VerificationCodeService(db)
+    result = await verification_service.send_verification_code(email, "register")
+    return EmailVerificationResponse(
+        message=result["message"],
+        expires_at=result["expires_at"]
+    )
+
+
+@router.post("/register", response_model=RegisterResponse, status_code=HTTPStatus.CREATED)
 async def register(
     user_data: UserCreate,
     db: Session = Depends(get_db)
 ):
     """用户注册"""
     auth_service = AuthService(db)
-    await auth_service.register(user_data)
-    return ApiResponse(message="注册成功")
+    return await auth_service.register(user_data)
 
 
 @router.post("/login", response_model=TokenResponse)

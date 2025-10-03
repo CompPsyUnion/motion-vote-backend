@@ -19,6 +19,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, description="密码（8位以上，包含字母数字）")
+    verification_code: str = Field(..., description="邮箱验证码")
 
 
 class UserUpdate(BaseModel):
@@ -43,6 +44,14 @@ class UserLogin(BaseModel):
 
 
 class TokenResponse(BaseModel):
+    access_token: str = Field(..., description="访问令牌")
+    refresh_token: str = Field(..., description="刷新令牌")
+    token_type: str = Field(default="bearer", description="令牌类型")
+    expires_in: int = Field(..., description="令牌有效期（秒）")
+
+
+class RegisterResponse(BaseModel):
+    user: UserResponse = Field(..., description="用户信息")
     access_token: str = Field(..., description="访问令牌")
     refresh_token: str = Field(..., description="刷新令牌")
     token_type: str = Field(default="bearer", description="令牌类型")

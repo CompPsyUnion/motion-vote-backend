@@ -5,15 +5,25 @@ from src.core.auth import (create_access_token, create_refresh_token,
 from src.core.exceptions import (AuthenticationError, BusinessError,
                                  ValidationError)
 from src.models.user import User
-from src.schemas.user import TokenResponse, UserCreate, UserLogin, UserRole
+from src.schemas.user import (RegisterResponse, TokenResponse, UserCreate,
+                              UserLogin, UserResponse, UserRole)
+from src.services.verification_service import VerificationCodeService
 
 
 class AuthService:
     def __init__(self, db: Session):
         self.db = db
+        self.verification_service = VerificationCodeService(db)
 
-    async def register(self, user_data: UserCreate) -> User:
+    async def register(self, user_data: UserCreate) -> RegisterResponse:
         """用户注册"""
+        # 验证邮箱验证码
+        self.verification_service.verify_code(
+            user_data.email,
+            user_data.verification_code,
+            "register"
+        )
+
         # 检查邮箱是否已存在
         existing_user = self.db.query(User).filter(
             User.email == user_data.email).first()
@@ -39,7 +49,18 @@ class AuthService:
         self.db.commit()
         self.db.refresh(db_user)
 
-        return db_user
+        # 生成令牌
+        access_token = create_access_token(data={"sub": str(db_user.id)})
+        refresh_token = create_refresh_token(data={"sub": str(db_user.id)})
+
+        # 返回注册响应
+        user_response = UserResponse.model_validate(db_user)
+        return RegisterResponse(
+            user=user_response,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=settings.access_token_expire_minutes * 60
+        )
 
     async def login(self, user_data: UserLogin) -> TokenResponse:
         """用户登录"""

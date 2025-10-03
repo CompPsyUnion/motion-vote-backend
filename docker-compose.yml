@@ -10,8 +10,8 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"
     networks:
       - motion-vote-network
     healthcheck:
@@ -25,8 +25,8 @@ services:
     image: redis:7-alpine
     container_name: motion-vote-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # ports:
+    #   - "6379:6379"
     networks:
       - motion-vote-network
     healthcheck:
@@ -35,27 +35,28 @@ services:
       timeout: 3s
       retries: 3
 
-  # motion-vote-smtogo:
-  #   image: ghcr.io/hnrobert/smtogo:latest
-  #   container_name: motion-vote-smtogo
-  #   restart: unless-stopped
-  #   ports:
-  #     - "5349:8000"
-  #   networks:
-  #     - motion-vote-network
-  #   environment:
-  #     - GIN_MODE=release
-  #   volumes:
-  #     - ./config:/app/config
-  #     - ./data:/app/data
+  motion-vote-smtogo:
+    image: ghcr.io/hnrobert/smtogo:latest
+    container_name: motion-vote-smtogo
+    restart: unless-stopped
+    # ports:
+    #   - "5349:8000"
+    networks:
+      - motion-vote-network
+    environment:
+      - GIN_MODE=release
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
 
   # FastAPI应用
   motion-vote-api:
-    build: .
+    # build: .
+    image: ghcr.io/comppsyunion/motion-vote-backend
     container_name: motion-vote-api
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "3041:8000"
     networks:
       - motion-vote-network
     environment:
@@ -75,7 +76,7 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
+    external: true
 
 networks:
   motion-vote-network:

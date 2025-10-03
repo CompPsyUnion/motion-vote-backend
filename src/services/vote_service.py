@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from src.core.websocket import manager
 from src.models.activity import Activity
 from src.models.debate import Debate
 from src.models.vote import Participant, Vote, VoteHistory
@@ -245,6 +246,27 @@ class VoteService:
             vote_id = str(new_vote.id)
 
         self.db.commit()
+
+        # 广播投票更新到 WebSocket 连接
+        try:
+            # 获取最新的投票结果用于广播
+            vote_results = self.get_debate_results(debate_id)
+            import asyncio
+            asyncio.create_task(
+                manager.broadcast_vote_update(
+                    str(debate.activity_id),
+                    debate_id,
+                    {
+                        "vote_results": vote_results.__dict__,
+                        "participant_id": str(participant.id),
+                        "position": position.value,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                )
+            )
+        except Exception as e:
+            # WebSocket 广播失败不应该影响投票操作
+            print(f"WebSocket 广播失败: {e}")
 
         return {
             "vote_id": vote_id,

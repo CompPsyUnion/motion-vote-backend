@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
 
+    # SMTP Service (smtogo)
+    smtp_service_url: str = "http://motion-vote-smtogo:8000"
+    smtp_api_key: str = "your-api-key"
+
     # Application
     app_name: str = "Motion Vote API"
     app_version: str = "1.0.0"

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from http import HTTPStatus
 
 from fastapi import APIRouter, Depends
@@ -5,9 +6,10 @@ from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from src.core.database import get_db
 from src.schemas.base import ApiResponse
-from src.schemas.email_verification import EmailVerificationResponse
-from src.schemas.user import (PasswordReset, RegisterResponse, TokenResponse,
-                              UserCreate, UserLogin)
+from src.schemas.email_verification import (EmailVerificationResponse,
+                                            VerificationCodeData)
+from src.schemas.user import (PasswordReset, RegisterRequest, RegisterResponse,
+                              TokenResponse, UserLogin)
 from src.services.auth_service import AuthService
 from src.services.verification_service import VerificationCodeService
 
@@ -24,14 +26,16 @@ async def get_verification_code(
     verification_service = VerificationCodeService(db)
     result = await verification_service.send_verification_code(email, "register")
     return EmailVerificationResponse(
+        success=True,
         message=result["message"],
-        expires_at=result["expires_at"]
+        timestamp=datetime.now(timezone.utc),
+        data=VerificationCodeData(session=result["session"])
     )
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=HTTPStatus.CREATED)
 async def register(
-    user_data: UserCreate,
+    user_data: RegisterRequest,
     db: Session = Depends(get_db)
 ):
     """用户注册"""

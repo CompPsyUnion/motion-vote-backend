@@ -9,6 +9,7 @@ class EmailVerification(Base):
     __tablename__ = "email_verifications"
 
     id = Column(String, primary_key=True, index=True)
+    session = Column(String, nullable=False, index=True)  # 验证码session
     email = Column(String, nullable=False, index=True)
     code = Column(String, nullable=False)
     # register, reset_password

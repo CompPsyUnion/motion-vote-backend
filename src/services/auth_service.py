@@ -5,8 +5,8 @@ from src.core.auth import (create_access_token, create_refresh_token,
 from src.core.exceptions import (AuthenticationError, BusinessError,
                                  ValidationError)
 from src.models.user import User
-from src.schemas.user import (RegisterResponse, TokenResponse, UserCreate,
-                              UserLogin, UserResponse, UserRole)
+from src.schemas.user import (RegisterRequest, RegisterResponse, TokenResponse,
+                              UserCreate, UserLogin, UserResponse, UserRole)
 from src.services.verification_service import VerificationCodeService
 
 
@@ -15,12 +15,13 @@ class AuthService:
         self.db = db
         self.verification_service = VerificationCodeService(db)
 
-    async def register(self, user_data: UserCreate) -> RegisterResponse:
+    async def register(self, user_data: RegisterRequest) -> RegisterResponse:
         """用户注册"""
         # 验证邮箱验证码
         self.verification_service.verify_code(
             user_data.email,
-            user_data.verification_code,
+            user_data.code,
+            user_data.session,
             "register"
         )
 

@@ -22,6 +22,12 @@ class UserCreate(UserBase):
     verification_code: str = Field(..., description="邮箱验证码")
 
 
+class RegisterRequest(UserBase):
+    password: str = Field(..., min_length=8, description="密码（8位以上，包含字母数字）")
+    code: str = Field(..., description="邮箱验证码")
+    session: str = Field(..., description="邮箱验证码session")
+
+
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, description="用户姓名")
     phone: Optional[str] = Field(None, description="手机号")

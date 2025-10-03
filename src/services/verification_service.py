@@ -37,8 +37,9 @@ class VerificationCodeService:
                     int(time_since_sent.total_seconds())
                 raise ValidationError(f"请等待 {remaining_seconds} 秒后再重新发送验证码")
 
-        # 生成新的验证码
+        # 生成新的验证码和session
         code = self.email_service.generate_verification_code()
+        session = str(uuid.uuid4())
         expires_at = datetime.utcnow() + timedelta(minutes=self.code_expire_minutes)
 
         # 发送邮件
@@ -56,6 +57,7 @@ class VerificationCodeService:
         # 保存新的验证码
         verification = EmailVerification(
             id=str(uuid.uuid4()),
+            session=session,
             email=email,
             code=code,
             purpose=purpose,
@@ -67,14 +69,17 @@ class VerificationCodeService:
 
         return {
             "message": "验证码已发送，请查收邮件",
+            "session": session,
             "expires_at": expires_at
         }
-    def verify_code(self, email: str, code: str, purpose: str = "register") -> bool:
+
+    def verify_code(self, email: str, code: str, session: str, purpose: str = "register") -> bool:
         """验证验证码"""
 
         # 查找验证码记录
         verification = self.db.query(EmailVerification).filter(
             EmailVerification.email == email,
+            EmailVerification.session == session,
             EmailVerification.purpose == purpose,
             EmailVerification.used == False
         ).first()

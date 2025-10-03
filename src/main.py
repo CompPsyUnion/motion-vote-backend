@@ -10,6 +10,7 @@ from src.api.v1.router import api_router
 from src.config import settings
 from src.core.database import init_database
 from src.core.exceptions import AppException
+from src.core.redis import RedisClient
 
 
 def create_app() -> FastAPI:
@@ -84,8 +85,21 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """应用启动和关闭时执行"""
+        # 初始化数据库
         init_database()
+
+        # 初始化Redis连接（测试连接）
+        try:
+            redis_client = RedisClient.get_instance()
+            redis_client.ping()
+            print("✅ Redis连接成功")
+        except Exception as e:
+            print(f"❌ Redis连接失败: {e}")
+
         yield
+
+        # 关闭Redis连接
+        RedisClient.close()
 
     app.router.lifespan_context = lifespan
 

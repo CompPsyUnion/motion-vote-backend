@@ -11,7 +11,8 @@ from src.schemas.email_verification import (EmailVerificationResponse,
 from src.schemas.user import (PasswordReset, RegisterRequest, RegisterResponse,
                               TokenResponse, UserLogin)
 from src.services.auth_service import AuthService
-from src.services.verification_service import VerificationCodeService
+from src.services.redis_verification_service import \
+    RedisVerificationCodeService
 
 router = APIRouter()
 security = HTTPBearer()
@@ -19,17 +20,16 @@ security = HTTPBearer()
 
 @router.get("/getcode", response_model=EmailVerificationResponse)
 async def get_verification_code(
-    email: str,
-    db: Session = Depends(get_db)
+    email: str
 ):
     """获取验证码"""
-    verification_service = VerificationCodeService(db)
+    verification_service = RedisVerificationCodeService()
     result = await verification_service.send_verification_code(email, "register")
     return EmailVerificationResponse(
         success=True,
-        message=result["message"],
+        message=str(result["message"]),
         timestamp=datetime.now(timezone.utc),
-        data=VerificationCodeData(session=result["session"])
+        data=VerificationCodeData(session=str(result["session"]))
     )
 
 

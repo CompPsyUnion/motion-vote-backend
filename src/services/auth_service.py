@@ -7,13 +7,14 @@ from src.core.exceptions import (AuthenticationError, BusinessError,
 from src.models.user import User
 from src.schemas.user import (RegisterRequest, RegisterResponse, TokenResponse,
                               UserCreate, UserLogin, UserResponse, UserRole)
-from src.services.verification_service import VerificationCodeService
+from src.services.redis_verification_service import \
+    RedisVerificationCodeService
 
 
 class AuthService:
     def __init__(self, db: Session):
         self.db = db
-        self.verification_service = VerificationCodeService(db)
+        self.verification_service = RedisVerificationCodeService()
 
     async def register(self, user_data: RegisterRequest) -> RegisterResponse:
         """用户注册"""
@@ -21,8 +22,8 @@ class AuthService:
         self.verification_service.verify_code(
             user_data.email,
             user_data.code,
-            user_data.session,
-            "register"
+            "register",
+            user_data.session
         )
 
         # 检查邮箱是否已存在

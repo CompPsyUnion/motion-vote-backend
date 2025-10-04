@@ -10,8 +10,8 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"
     networks:
       - motion-vote-network
     healthcheck:
@@ -25,8 +25,8 @@ services:
     image: redis:7-alpine
     container_name: motion-vote-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # ports:
+    #   - "6379:6379"
     networks:
       - motion-vote-network
     healthcheck:
@@ -34,43 +34,50 @@ services:
       interval: 9s
       timeout: 3s
       retries: 3
-  
-  # motion-vote-smtogo:
-  #   image: ghcr.io/hnrobert/smtogo:latest
-  #   container_name: motion-vote-smtogo
-  #   restart: unless-stopped
-  #   ports:
-  #     - "5349:8000"
-  #   networks:
-  #     - motion-vote-network
-  #   environment:
-  #     - GIN_MODE=release
-  #   volumes:
-  #     - ./config:/app/config
-  #     - ./data:/app/data
 
-  # FastAPI应用
-  motion-vote-api:
-    build: .
-    container_name: motion-vote-api
-    ports:
-      - "8000:8000"
+  motion-vote-smtogo:
+    image: ghcr.io/hnrobert/smtogo:latest
+    container_name: motion-vote-smtogo
+    restart: unless-stopped
+    # ports:
+    #   - "5349:8000"
     networks:
       - motion-vote-network
     environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/motionvote
-      - REDIS_URL=redis://redis:6379/0
+      - GIN_MODE=release
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+
+  # FastAPI应用
+  motion-vote-api:
+    # build: .
+    image: ghcr.io/comppsyunion/motion-vote-backend
+    container_name: motion-vote-api
+    restart: unless-stopped
+    ports:
+      - "3041:8000"
+    networks:
+      - motion-vote-network
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@motion-vote-db:5432/motionvote
+      - REDIS_URL=redis://motion-vote-redis:6379/0
       - SECRET_KEY=your-secret-key-change-in-production
     depends_on:
-      db:
+      motion-vote-db:
         condition: service_healthy
-      redis:
+      motion-vote-redis:
         condition: service_healthy
-    restart: unless-stopped
     volumes:
-      - ./uploads:/app/uploads
-      - ./.env:/app/.env
+      # 挂载源码目录实现热重载
+      - ./src:/app/src
+      - ./requirements.txt:/app/requirements.txt
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:
   postgres_data:
+    external: true
+
+networks:
+  motion-vote-network:
+    driver: bridge

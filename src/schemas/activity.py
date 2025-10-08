@@ -84,6 +84,7 @@ class ActivityResponse(ActivityBase):
 
     class Config(ActivityBase.Config):
         from_attributes = True
+        use_enum_values = True
 
 
 # 添加详细的活动响应模式，包含协作者和辩题信息
@@ -104,6 +105,7 @@ class ActivityDetail(ActivityResponse):
     statistics: ActivityDetailStatistics = Field(..., description="活动统计")
 
     class Config(ActivityResponse.Config):
+        use_enum_values = True
         pass
 
 

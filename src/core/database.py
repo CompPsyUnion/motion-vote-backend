@@ -24,10 +24,30 @@ engine = create_engine(
 def _checkout_listener(dbapi_con, con_record, con_proxy):
     try:
         cid = id(dbapi_con)
-        stack = ''.join(traceback.format_stack(limit=8))
-        _checkout_stacks[cid] = (stack, threading.get_ident())
-        print(
-            f"[DB POOL] checked out connection id={cid}, thread={threading.get_ident()}")
+
+        # Extract a small stack snapshot (FrameSummary objects)
+        frames = traceback.extract_stack(limit=12)
+
+        # Decide whether to suppress immediate printing for noisy internal frames
+        suppress_print = False
+        for fr in frames:
+            # if SQLAlchemy reflection or alembic/sys internals are present, suppress
+            if 'sqlalchemy/engine/reflection.py' in (fr.filename or ''):
+                suppress_print = True
+                break
+
+        # Store a compact stack string for later inspection
+        try:
+            stack_str = ''.join(traceback.format_list(frames))
+        except Exception:
+            stack_str = '<unavailable stack>'
+
+        _checkout_stacks[cid] = (
+            stack_str, threading.get_ident(), suppress_print)
+
+        if not suppress_print:
+            print(
+                f"[DB POOL] checked out connection id={cid}, thread={threading.get_ident()}")
     except Exception:
         pass
 
@@ -38,9 +58,13 @@ def _checkin_listener(dbapi_con, con_record):
         cid = id(dbapi_con)
         info = _checkout_stacks.pop(cid, None)
         if info:
-            stack, thread_id = info
-            print(
-                f"[DB POOL] checked in connection id={cid}, thread={threading.get_ident()}, checked out by thread={thread_id}\nSTACK AT CHECKOUT:\n{stack}")
+            stack, thread_id, suppressed = info
+            if suppressed:
+                print(
+                    f"[DB POOL] checked in connection id={cid}, thread={threading.get_ident()}, checked out by thread={thread_id} (checkout print suppressed - internal SQLAlchemy reflection)")
+            else:
+                print(
+                    f"[DB POOL] checked in connection id={cid}, thread={threading.get_ident()}, checked out by thread={thread_id}\nSTACK AT CHECKOUT:\n{stack}")
         else:
             print(
                 f"[DB POOL] checked in connection id={cid}, thread={threading.get_ident()}, no checkout record")

@@ -9,7 +9,7 @@ class SiteInfo(Base):
     __tablename__ = "site_info"
 
     id = Column(String, primary_key=True)
-    name = Column(String, nullable=False, default="Motion Vote")
+    title = Column(String, nullable=False, default="Motion Vote")
     description = Column(Text, nullable=True)
     logo = Column(String, nullable=True)  # 标志URL
     icon = Column(String, nullable=True)  # 图标URL

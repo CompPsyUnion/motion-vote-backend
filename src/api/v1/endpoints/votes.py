@@ -1,10 +1,9 @@
 """投票系统 API 端点
 
-基于 OpenAPI 规范实现的投票系统接口，包括：
-- 参与者入场
-- 投票操作
-- 获取投票状态
-- 获取投票结果
+混合存储方案：
+- Redis：实时投票，毫秒级响应
+- 数据库：每2秒自动同步持久化
+- 接口保持不变，对前端透明
 """
 
 
@@ -12,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from src.api.dependencies import get_db
 from src.schemas.vote import ParticipantEnter, VoteRequest
-from src.services.vote_service import VoteService
+from src.services.hybrid_vote_service import HybridVoteService
 
 router = APIRouter()
 
@@ -23,7 +22,7 @@ async def participant_enter(
     db: Session = Depends(get_db)
 ):
     """参与者通过活动ID和编号进入活动"""
-    service = VoteService(db)
+    service = HybridVoteService(db)
     result = service.participant_enter(
         activity_id=enter_data.activity_id,
         participant_code=enter_data.participant_code,
@@ -43,8 +42,8 @@ async def vote_for_debate(
     vote_data: VoteRequest,
     db: Session = Depends(get_db)
 ):
-    """参与者对指定辩题进行投票"""
-    service = VoteService(db)
+    """参与者对指定辩题进行投票（Redis存储 + 2秒同步数据库）"""
+    service = HybridVoteService(db)
     result = service.vote_for_debate(
         debate_id=debate_id,
         session_token=vote_data.session_token,
@@ -64,8 +63,8 @@ async def get_vote_status(
     session_token: str = Query(..., alias="sessionToken", description="会话令牌"),
     db: Session = Depends(get_db)
 ):
-    """获取参与者在指定辩题的投票状态"""
-    service = VoteService(db)
+    """获取参与者在指定辩题的投票状态（从Redis读取）"""
+    service = HybridVoteService(db)
     status = service.get_vote_status(
         debate_id=debate_id,
         session_token=session_token
@@ -83,12 +82,30 @@ async def get_debate_results(
     debate_id: str,
     db: Session = Depends(get_db)
 ):
-    """获取指定辩题的投票统计结果"""
-    service = VoteService(db)
+    """获取指定辩题的投票统计结果（从Redis实时计算）"""
+    service = HybridVoteService(db)
     results = service.get_debate_results(debate_id=debate_id)
 
     return {
         "success": True,
         "message": "获取投票结果成功",
         "data": results
+    }
+
+
+@router.delete("/debates/{debate_id}/votes")
+async def clear_debate_votes(
+    debate_id: str,
+    db: Session = Depends(get_db)
+):
+    """清空指定辩题的所有投票数据（管理员功能）"""
+    service = HybridVoteService(db)
+    result = service.clear_debate_votes(debate_id=debate_id)
+
+    return {
+        "success": True,
+        "message": result["message"],
+        "data": {
+            "deleted_count": result["deleted_count"]
+        }
     }

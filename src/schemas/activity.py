@@ -75,7 +75,7 @@ class ActivityUpdate(BaseModel):
 
 class ActivityResponse(ActivityBase):
     id: str = Field(..., description="活动ID")
-    status: ActivityStatus = Field(..., description="活动状态")
+    status: str = Field(..., description="活动状态")
     actualParticipants: int = Field(
         default=0, description="实际参与人数", alias="actual_participants")
     ownerId: str = Field(..., description="创建者ID", alias="owner_id")

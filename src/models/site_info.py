@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, String, Text
+from sqlalchemy.orm import synonym
 from src.core.database import Base
 
 
@@ -11,6 +12,7 @@ class SiteInfo(Base):
     id = Column(String, primary_key=True)
     title = Column(String, nullable=False, default="Motion Vote")
     description = Column(Text, nullable=True)
+    open_register = Column(Boolean, default=True)
     logo = Column(String, nullable=True)  # 标志URL
     icon = Column(String, nullable=True)  # 图标URL
     contact = Column(String, nullable=True)  # 联系方式链接

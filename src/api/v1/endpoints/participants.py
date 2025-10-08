@@ -117,18 +117,42 @@ async def batch_import_participants(
     - Excel: .xlsx, .xls
     - CSV: .csv (支持UTF-8、GBK等编码)
     
+    支持的文件布局：
+    1. **导入模板格式**（简化）：
+       - 列：姓名、手机号、备注
+       - 适合从零开始创建参与者名单
+    
+    2. **导出文件格式**（完整）：
+       - 列：编号、姓名、手机号、备注、是否入场、入场时间、创建时间
+       - 支持直接编辑导出的文件并重新导入
+       - 导入时会自动忽略编号、入场状态等字段，重新生成
+    
+    智能列识别：
+    - 系统会自动识别标题行中的"姓名"、"手机号"、"备注"列
+    - 支持中英文列名
+    - 你可以直接使用导出的文件，在末尾添加新参与者后重新导入
+    
     文件格式要求：
-    - 第一行为标题行（会被跳过）
-    - 数据列：姓名（必填）、手机号（可选）、备注（可选）
+    - 第一行必须是标题行
+    - 姓名列必填，其他列可选
     - CSV文件建议使用UTF-8编码保存
     
-    示例：
+    示例 - 简化格式：
     ```
     姓名,手机号,备注
     张三,13800138000,VIP会员
     李四,13900139000,
     王五,,普通参与者
     ```
+    
+    示例 - 完整格式（导出文件）：
+    ```
+    编号,姓名,手机号,备注,是否入场,入场时间,创建时间
+    0001,张三,13800138000,VIP会员,是,2025-01-01 10:00:00,2025-01-01 09:00:00
+    0002,李四,13900139000,,否,,2025-01-01 09:00:00
+    0003,王五,,新增参与者,否,,
+    ```
+    注：导入时编号、入场状态等会被自动重新生成，你只需关注姓名、手机号、备注即可。
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="未提供文件")
@@ -166,40 +190,4 @@ async def export_participants(
         media_type="text/csv",
         headers={
             "Content-Disposition": f"attachment; filename=participants_{activity_id}.csv"}
-    )
-
-
-@router.get("/{activity_id}/participants/template")
-async def download_import_template(
-    activity_id: str,
-    format: str = Query(default="csv", description="模板格式 (csv|excel)"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """下载参与者导入模板
-    
-    Args:
-        activity_id: 活动ID
-        format: 模板格式，可选值: csv, excel
-    
-    Returns:
-        CSV或Excel格式的模板文件
-    """
-    service = ParticipantService(db)
-    
-    if format.lower() == "excel":
-        template_data, media_type, filename = service.generate_excel_template(
-            activity_id=activity_id,
-            user_id=str(current_user.id)
-        )
-    else:
-        template_data, media_type, filename = service.generate_csv_template(
-            activity_id=activity_id,
-            user_id=str(current_user.id)
-        )
-    
-    return StreamingResponse(
-        io.BytesIO(template_data),
-        media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )

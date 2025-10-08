@@ -154,6 +154,91 @@ class ParticipantService:
         ).count()
         return f"{count + 1:04d}"  # 生成4位数字编号，如0001, 0002
 
+    def _detect_csv_format(self, header_row: list) -> dict:
+        """智能识别CSV文件格式，返回列索引映射
+        
+        支持的格式：
+        1. 导入模板格式：姓名,手机号,备注
+        2. 导出文件格式：编号,姓名,手机号,备注,是否入场,入场时间,创建时间
+        
+        Returns:
+            dict: {'name': int, 'phone': int, 'note': int} 列索引映射
+        """
+        # 标准化标题（去除空格和引号）
+        headers = [h.strip().strip('"').strip("'") for h in header_row]
+        
+        # 初始化列映射
+        column_mapping = {
+            'name': -1,
+            'phone': -1,
+            'note': -1
+        }
+        
+        # 可能的列名匹配
+        name_keywords = ['姓名', 'name', '名字', '参与者']
+        phone_keywords = ['手机', 'phone', '电话', '手机号', '联系方式', '联系电话']
+        note_keywords = ['备注', 'note', '说明', '备注信息', '描述']
+        
+        # 查找每个字段的列索引
+        for idx, header in enumerate(headers):
+            header_lower = header.lower()
+            
+            # 匹配姓名列
+            if column_mapping['name'] == -1:
+                for keyword in name_keywords:
+                    if keyword in header or keyword in header_lower:
+                        column_mapping['name'] = idx
+                        break
+            
+            # 匹配手机号列
+            if column_mapping['phone'] == -1:
+                for keyword in phone_keywords:
+                    if keyword in header or keyword in header_lower:
+                        column_mapping['phone'] = idx
+                        break
+            
+            # 匹配备注列
+            if column_mapping['note'] == -1:
+                for keyword in note_keywords:
+                    if keyword in header or keyword in header_lower:
+                        column_mapping['note'] = idx
+                        break
+        
+        # 如果没有找到姓名列，尝试使用默认位置
+        if column_mapping['name'] == -1:
+            # 检查是否是导出格式（编号,姓名,手机号,备注...）
+            if len(headers) >= 7 and ('编号' in headers[0] or 'code' in headers[0].lower()):
+                # 导出文件格式
+                column_mapping['name'] = 1  # 姓名在第2列
+                column_mapping['phone'] = 2  # 手机号在第3列
+                column_mapping['note'] = 3  # 备注在第4列
+            elif len(headers) >= 3:
+                # 导入模板格式
+                column_mapping['name'] = 0  # 姓名在第1列
+                column_mapping['phone'] = 1  # 手机号在第2列
+                column_mapping['note'] = 2  # 备注在第3列
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="无法识别文件格式，请确保包含姓名、手机号、备注列"
+                )
+        
+        # 验证姓名列是否找到
+        if column_mapping['name'] == -1:
+            raise HTTPException(
+                status_code=400,
+                detail="未找到姓名列，请确保CSV文件包含'姓名'列"
+            )
+        
+        # 手机号和备注列是可选的，如果没找到则使用默认值
+        if column_mapping['phone'] == -1:
+            column_mapping['phone'] = column_mapping['name'] + 1
+        
+        if column_mapping['note'] == -1:
+            column_mapping['note'] = column_mapping['name'] + 2
+        
+        return column_mapping
+
     def batch_import_participants(
         self,
         activity_id: str,
@@ -193,7 +278,12 @@ class ParticipantService:
         activity_id: str,
         contents: bytes
     ) -> ParticipantBatchImportResult:
-        """从CSV文件导入参与者"""
+        """从CSV文件导入参与者
+        
+        支持两种格式：
+        1. 导入模板格式：姓名,手机号,备注
+        2. 导出文件格式：编号,姓名,手机号,备注,是否入场,入场时间,创建时间
+        """
         total = success = failed = 0
         errors = []
 
@@ -217,8 +307,13 @@ class ParticipantService:
             csv_file = io.StringIO(text_content)
             reader = csv.reader(csv_file)
             
-            # 跳过标题行
-            next(reader, None)
+            # 读取标题行以确定格式
+            header_row = next(reader, None)
+            if not header_row:
+                raise HTTPException(status_code=400, detail="文件为空或格式错误")
+            
+            # 智能识别列映射
+            column_mapping = self._detect_csv_format(header_row)
             
             # 处理每一行
             for idx, row in enumerate(reader, start=2):
@@ -227,10 +322,15 @@ class ParticipantService:
 
                 total += 1
                 
-                # 提取数据（姓名、手机号、备注）
-                name = row[0].strip() if len(row) > 0 and row[0] else ""
-                phone = row[1].strip() if len(row) > 1 and row[1] else None
-                note = row[2].strip() if len(row) > 2 and row[2] else None
+                # 根据列映射提取数据
+                try:
+                    name = row[column_mapping['name']].strip() if len(row) > column_mapping['name'] and row[column_mapping['name']] else ""
+                    phone = row[column_mapping['phone']].strip() if len(row) > column_mapping['phone'] and row[column_mapping['phone']] else None
+                    note = row[column_mapping['note']].strip() if len(row) > column_mapping['note'] and row[column_mapping['note']] else None
+                except IndexError:
+                    errors.append(f"第{idx}行：列数不足，请检查文件格式")
+                    failed += 1
+                    continue
 
                 # 验证姓名
                 if not name:
@@ -287,7 +387,12 @@ class ParticipantService:
         activity_id: str,
         contents: bytes
     ) -> ParticipantBatchImportResult:
-        """从Excel文件导入参与者"""
+        """从Excel文件导入参与者
+        
+        支持两种格式：
+        1. 导入模板格式：姓名,手机号,备注
+        2. 导出文件格式：编号,姓名,手机号,备注,是否入场,入场时间,创建时间
+        """
         total = success = failed = 0
         errors = []
 
@@ -300,6 +405,20 @@ class ParticipantService:
                     total=0, success=0, failed=0, errors=["未找到工作表"]
                 )
 
+            # 读取标题行以确定格式
+            header_row = None
+            for row in worksheet.iter_rows(min_row=1, max_row=1, values_only=True):
+                header_row = [str(cell) if cell is not None else "" for cell in row]
+                break
+            
+            if not header_row:
+                return ParticipantBatchImportResult(
+                    total=0, success=0, failed=0, errors=["未找到标题行"]
+                )
+            
+            # 智能识别列映射
+            column_mapping = self._detect_csv_format(header_row)
+
             # 跳过标题行，从第二行开始
             for idx, row in enumerate(worksheet.iter_rows(min_row=2, values_only=True), start=2):
                 if not row or not any(row):
@@ -307,10 +426,15 @@ class ParticipantService:
 
                 total += 1
                 
-                # 提取数据
-                name = str(row[0]).strip() if row[0] else ""
-                phone = str(row[1]).strip() if len(row) > 1 and row[1] else None
-                note = str(row[2]).strip() if len(row) > 2 and row[2] else None
+                # 根据列映射提取数据
+                try:
+                    name = str(row[column_mapping['name']]).strip() if len(row) > column_mapping['name'] and row[column_mapping['name']] else ""
+                    phone = str(row[column_mapping['phone']]).strip() if len(row) > column_mapping['phone'] and row[column_mapping['phone']] else None
+                    note = str(row[column_mapping['note']]).strip() if len(row) > column_mapping['note'] and row[column_mapping['note']] else None
+                except IndexError:
+                    errors.append(f"第{idx}行：列数不足，请检查文件格式")
+                    failed += 1
+                    continue
 
                 # 验证姓名
                 if not name:
@@ -424,108 +548,6 @@ class ParticipantService:
 
         # 添加BOM以确保Excel正确显示中文
         return '\ufeff'.encode('utf-8') + csv_content.encode('utf-8')
-
-    def generate_csv_template(
-        self,
-        activity_id: str,
-        user_id: str
-    ) -> tuple[bytes, str, str]:
-        """生成CSV导入模板
-        
-        Returns:
-            tuple: (模板数据, MIME类型, 文件名)
-        """
-        # 检查权限
-        self._check_activity_permission(activity_id, user_id)
-        
-        # 创建CSV内容
-        output = io.StringIO()
-        writer = csv.writer(output)
-        
-        # 写入标题行
-        writer.writerow(["姓名", "手机号", "备注"])
-        
-        # 写入示例数据
-        writer.writerow(["张三", "13800138000", "VIP会员"])
-        writer.writerow(["李四", "13900139000", ""])
-        writer.writerow(["王五", "", "普通参与者"])
-        
-        # 转换为字节（添加BOM以确保Excel正确显示中文）
-        csv_content = output.getvalue()
-        output.close()
-        
-        template_data = '\ufeff'.encode('utf-8') + csv_content.encode('utf-8')
-        
-        return (
-            template_data,
-            "text/csv",
-            f"participant_import_template_{activity_id}.csv"
-        )
-
-    def generate_excel_template(
-        self,
-        activity_id: str,
-        user_id: str
-    ) -> tuple[bytes, str, str]:
-        """生成Excel导入模板
-        
-        Returns:
-            tuple: (模板数据, MIME类型, 文件名)
-        """
-        from openpyxl import Workbook
-        from openpyxl.styles import Font, PatternFill, Alignment
-        
-        # 检查权限
-        self._check_activity_permission(activity_id, user_id)
-        
-        # 创建工作簿
-        wb = Workbook()
-        ws = wb.active
-        
-        if ws is None:
-            raise HTTPException(status_code=500, detail="创建工作表失败")
-        
-        ws.title = "参与者导入模板"
-        
-        # 设置标题行样式
-        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-        header_font = Font(bold=True, color="FFFFFF")
-        header_alignment = Alignment(horizontal="center", vertical="center")
-        
-        # 写入标题行
-        headers = ["姓名", "手机号", "备注"]
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num, value=header)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = header_alignment
-        
-        # 写入示例数据
-        example_data = [
-            ["张三", "13800138000", "VIP会员"],
-            ["李四", "13900139000", ""],
-            ["王五", "", "普通参与者"]
-        ]
-        
-        for row_num, row_data in enumerate(example_data, 2):
-            for col_num, value in enumerate(row_data, 1):
-                ws.cell(row=row_num, column=col_num, value=value)
-        
-        # 设置列宽
-        ws.column_dimensions['A'].width = 15
-        ws.column_dimensions['B'].width = 20
-        ws.column_dimensions['C'].width = 30
-        
-        # 保存到字节流
-        excel_file = io.BytesIO()
-        wb.save(excel_file)
-        excel_file.seek(0)
-        
-        return (
-            excel_file.getvalue(),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            f"participant_import_template_{activity_id}.xlsx"
-        )
 
     def generate_participant_link(self, participant_id: str, user_id: str) -> dict:
         """生成参与者链接参数

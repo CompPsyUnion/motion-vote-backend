@@ -29,6 +29,7 @@ def init_database():
         import src.models.debate
         import src.models.user
         import src.models.vote
+        import src.models.site_info
 
         # 获取所有应该存在的表
         expected_tables = list(Base.metadata.tables.keys())

@@ -501,7 +501,9 @@ class HybridVoteService:
                 await asyncio.sleep(2)  # 每2秒执行一次
                 await self._sync_redis_to_database()
             except Exception as e:
-                print(f"后台同步错误: {e}")
+                print(f"[ERROR] 后台同步错误: {e}")
+                import traceback
+                traceback.print_exc()
 
     async def _sync_redis_to_database(self):
         """将Redis中的脏数据同步到数据库"""
@@ -514,65 +516,70 @@ class HybridVoteService:
                 if not dirty_debates:
                     return
 
-                print(f"开始同步 {len(dirty_debates)} 个辩题的投票数据...")  # type: ignore
-
                 for debate_id in dirty_debates:  # type: ignore
                     await self._sync_debate_votes(str(debate_id), db)
 
                 # 清空脏标记
                 self.redis.delete(self._dirty_debates_key())
-                print(f"同步完成！")
 
             except Exception as e:
-                print(f"同步失败: {e}")
+                print(f"[ERROR] 数据库同步失败: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
                 db.close()
 
     async def _sync_debate_votes(self, debate_id: str, db: Session):
-        """同步单个辩题的投票数据"""
+        """同步单个辩题的投票数据（批量优化）"""
         try:
             # 获取Redis中的所有投票者
             participant_ids = self.redis.smembers(self._debate_votes_key(debate_id))
+            if not participant_ids:
+                return
 
+            # 批量获取Redis中的投票数据
+            vote_data_list = []
             for pid in participant_ids:  # type: ignore
                 vote_key = self._vote_key(debate_id, str(pid))
                 vote_data_str = self.redis.get(vote_key)  # type: ignore
+                if vote_data_str:
+                    vote_data = json.loads(str(vote_data_str))
+                    vote_data_list.append(vote_data)
 
-                if not vote_data_str:
-                    continue
+            if not vote_data_list:
+                return
 
-                vote_data = json.loads(str(vote_data_str))
+            # 批量查询数据库中的现有投票（一次查询）
+            participant_ids_list = [v['participant_id'] for v in vote_data_list]
+            existing_votes = db.query(Vote).filter(
+                Vote.debate_id == debate_id,
+                Vote.participant_id.in_(participant_ids_list)
+            ).all()
 
-                # 查找数据库中的现有投票
-                existing_vote = db.query(Vote).filter(
-                    Vote.debate_id == debate_id,
-                    Vote.participant_id == vote_data['participant_id']
-                ).first()
+            # 创建映射表：participant_id -> existing_vote
+            existing_votes_map = {str(v.participant_id): v for v in existing_votes}
+
+            # 批量处理更新和插入
+            updates = []
+            inserts = []
+
+            for vote_data in vote_data_list:
+                participant_id = vote_data['participant_id']
+                existing_vote = existing_votes_map.get(participant_id)
 
                 if existing_vote:
-                    # 更新现有投票
-                    # 只有当Redis数据更新时间晚于数据库时才更新
+                    # 检查是否需要更新
                     redis_updated_at = datetime.fromisoformat(vote_data['updated_at'])
                     db_updated_at = getattr(existing_vote, 'updated_at', None)
 
                     if db_updated_at is None or redis_updated_at > db_updated_at:
-                        db.execute(
-                            text("""
-                                UPDATE votes 
-                                SET position = :position,
-                                    change_count = :change_count,
-                                    is_final = :is_final,
-                                    updated_at = :updated_at
-                                WHERE id = :id
-                            """),
-                            {
-                                "position": vote_data['position'],
-                                "change_count": vote_data['change_count'],
-                                "is_final": vote_data['is_final'],
-                                "updated_at": redis_updated_at,
-                                "id": str(existing_vote.id)
-                            }
-                        )
+                        updates.append({
+                            "id": str(existing_vote.id),
+                            "position": vote_data['position'],
+                            "change_count": vote_data['change_count'],
+                            "is_final": vote_data['is_final'],
+                            "updated_at": redis_updated_at
+                        })
                 else:
                     # 创建新投票
                     new_vote = Vote(
@@ -585,10 +592,30 @@ class HybridVoteService:
                         created_at=datetime.fromisoformat(vote_data['created_at']),
                         updated_at=datetime.fromisoformat(vote_data['updated_at'])
                     )
-                    db.add(new_vote)
+                    inserts.append(new_vote)
+
+            # 批量执行更新
+            if updates:
+                db.execute(
+                    text("""
+                        UPDATE votes 
+                        SET position = :position,
+                            change_count = :change_count,
+                            is_final = :is_final,
+                            updated_at = :updated_at
+                        WHERE id = :id
+                    """),
+                    updates
+                )
+
+            # 批量插入
+            if inserts:
+                db.add_all(inserts)
 
             db.commit()
 
         except Exception as e:
-            print(f"同步辩题 {debate_id} 失败: {e}")
+            print(f"[ERROR] 同步辩题 {debate_id} 失败: {e}")
+            import traceback
+            traceback.print_exc()
             db.rollback()

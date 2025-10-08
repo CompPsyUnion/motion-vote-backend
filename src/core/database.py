@@ -20,8 +20,14 @@ engine = create_engine(
 
 
 # Add listeners to log pool checkouts/checkins for debugging connection leaks
+# Set to False to disable verbose logging
+ENABLE_DB_POOL_LOGGING = False
+
 @event.listens_for(engine, "checkout")
 def _checkout_listener(dbapi_con, con_record, con_proxy):
+    if not ENABLE_DB_POOL_LOGGING:
+        return
+    
     try:
         cid = id(dbapi_con)
 
@@ -54,6 +60,9 @@ def _checkout_listener(dbapi_con, con_record, con_proxy):
 
 @event.listens_for(engine, "checkin")
 def _checkin_listener(dbapi_con, con_record):
+    if not ENABLE_DB_POOL_LOGGING:
+        return
+    
     try:
         cid = id(dbapi_con)
         info = _checkout_stacks.pop(cid, None)

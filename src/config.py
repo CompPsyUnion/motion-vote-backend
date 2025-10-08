@@ -39,11 +39,6 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"
     max_file_size: int = 10485760  # 10MB
 
-    # Database pool (tune when diagnosing connection exhaustion)
-    db_pool_size: int = 10
-    db_max_overflow: int = 20
-    db_pool_timeout: int = 30
-
     # WebSocket
     ws_heartbeat_interval: int = 30
 

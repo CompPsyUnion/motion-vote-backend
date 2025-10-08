@@ -1,14 +1,52 @@
-from sqlalchemy import create_engine, inspect
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 from src.config import settings
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine, inspect, event
+import traceback
+import threading
 
-# 创建数据库引擎
+# map connection id -> stacktrace where it was checked out
+_checkout_stacks: dict = {}
+
+# 创建数据库引擎（使用配置的连接池参数）
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     pool_recycle=300,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout,
 )
+
+
+# Add listeners to log pool checkouts/checkins for debugging connection leaks
+@event.listens_for(engine, "checkout")
+def _checkout_listener(dbapi_con, con_record, con_proxy):
+    try:
+        cid = id(dbapi_con)
+        stack = ''.join(traceback.format_stack(limit=8))
+        _checkout_stacks[cid] = (stack, threading.get_ident())
+        print(
+            f"[DB POOL] checked out connection id={cid}, thread={threading.get_ident()}")
+    except Exception:
+        pass
+
+
+@event.listens_for(engine, "checkin")
+def _checkin_listener(dbapi_con, con_record):
+    try:
+        cid = id(dbapi_con)
+        info = _checkout_stacks.pop(cid, None)
+        if info:
+            stack, thread_id = info
+            print(
+                f"[DB POOL] checked in connection id={cid}, thread={threading.get_ident()}, checked out by thread={thread_id}\nSTACK AT CHECKOUT:\n{stack}")
+        else:
+            print(
+                f"[DB POOL] checked in connection id={cid}, thread={threading.get_ident()}, no checkout record")
+    except Exception:
+        pass
+
 
 # 创建会话工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -59,6 +97,19 @@ def get_db():
     """获取数据库会话"""
     db = SessionLocal()
     try:
+        # record where the session was requested for debugging
+        try:
+            stack = ''.join(traceback.format_stack(limit=6))
+            print(
+                f"[DB SESSION] opened session id={id(db)} thread={threading.get_ident()}\nSTACK:\n{stack}")
+        except Exception:
+            pass
+
         yield db
     finally:
+        try:
+            print(
+                f"[DB SESSION] closing session id={id(db)} thread={threading.get_ident()}")
+        except Exception:
+            pass
         db.close()

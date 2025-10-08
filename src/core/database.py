@@ -6,8 +6,12 @@ from src.config import settings
 # 创建数据库引擎
 engine = create_engine(
     settings.database_url,
-    pool_pre_ping=True,
-    pool_recycle=300,
+    pool_pre_ping=True,          # 连接池预检查，防止使用已断开的连接
+    pool_recycle=300,             # 每5分钟回收连接
+    pool_size=20,                 # 连接池大小从5增加到20
+    max_overflow=30,              # 最大溢出连接数从10增加到30
+    pool_timeout=60,              # 连接超时时间从30秒增加到60秒
+    echo_pool=False,              # 生产环境关闭连接池日志
 )
 
 # 创建会话工厂

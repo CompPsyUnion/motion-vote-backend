@@ -9,13 +9,12 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
 from src.core.database import SessionLocal
 from src.core.redis import get_redis
 from src.core.websocket import manager
@@ -66,6 +65,19 @@ class HybridVoteService:
         """需要同步到数据库的辩题ID集合"""
         return "sync:dirty_debates"
 
+    def _debate_cache_key(self, debate_id: str) -> str:
+        """辩题信息缓存的Redis key"""
+        return f"debate:{debate_id}:info"
+
+    def invalidate_debate_cache(self, debate_id: str):
+        """清除辩题缓存（当debate状态更新时调用）"""
+        self.redis.delete(self._debate_cache_key(debate_id))  # type: ignore
+
+    def invalidate_activity_config_cache(self, activity_id: str):
+        """清除活动配置缓存（当activity settings更新时调用）"""
+        cache_key = f"activity:{activity_id}:vote_config"
+        self.redis.delete(cache_key)  # type: ignore
+
     # ============ 核心业务方法 ============
 
     def _get_activity_settings(self, activity_id: str) -> Dict[str, Any]:
@@ -87,10 +99,18 @@ class HybridVoteService:
         return settings_dict
 
     def _get_vote_config(self, activity_id: str) -> Dict[str, Any]:
-        """获取投票相关配置"""
+        """获取投票相关配置（优先从Redis缓存）"""
+        # 尝试从Redis缓存获取
+        cache_key = f"activity:{activity_id}:vote_config"
+        cached_config = self.redis.get(cache_key)  # type: ignore
+
+        if cached_config:
+            return json.loads(str(cached_config))
+
+        # 缓存未命中，从数据库获取
         settings = self._get_activity_settings(activity_id)
 
-        return {
+        config = {
             'max_vote_changes': settings.get('max_vote_changes', settings.get('maxVoteChanges', 3)),
             'allow_vote_change': settings.get('allow_vote_change', settings.get('allowVoteChange', True)),
             'auto_lock_votes': settings.get('auto_lock_votes', settings.get('autoLockVotes', False)),
@@ -98,6 +118,11 @@ class HybridVoteService:
             'anonymous_voting': settings.get('anonymous_voting', settings.get('anonymousVoting', True)),
             'require_check_in': settings.get('require_check_in', settings.get('requireCheckIn', True))
         }
+
+        # 缓存配置(60秒过期)
+        self.redis.setex(cache_key, 60, json.dumps(config))  # type: ignore
+
+        return config
 
     def participant_enter(
         self,
@@ -208,16 +233,38 @@ class HybridVoteService:
         participant_id = session_data["participant_id"]
         activity_id = session_data["activity_id"]
 
-        # 2. 验证辩题（从数据库）
-        debate = self.db.query(Debate).filter(Debate.id == debate_id).first()
-        if not debate:
-            raise HTTPException(status_code=404, detail="辩题不存在")
+        # 2. 验证辩题（优先从Redis缓存读取，避免频繁数据库查询）
+        debate_cache_key = f"debate:{debate_id}:info"
+        debate_cache = self.redis.get(debate_cache_key)  # type: ignore
 
-        if str(debate.activity_id) != activity_id:
+        if debate_cache:
+            # 从缓存读取
+            debate_info = json.loads(str(debate_cache))
+            debate_activity_id = debate_info['activity_id']
+            debate_status = debate_info['status']
+        else:
+            # 缓存未命中，从数据库查询并缓存
+            debate = self.db.query(Debate).filter(
+                Debate.id == debate_id).first()
+            if not debate:
+                raise HTTPException(status_code=404, detail="辩题不存在")
+
+            debate_activity_id = str(debate.activity_id)
+            debate_status = debate.status
+
+            # 缓存辩题信息(30秒过期)
+            debate_info = {
+                'activity_id': debate_activity_id,
+                'status': debate_status
+            }
+            self.redis.setex(debate_cache_key, 30, json.dumps(
+                debate_info))  # type: ignore
+
+        if debate_activity_id != activity_id:
             raise HTTPException(status_code=403, detail="无权限为此辩题投票")
 
         allowed_statuses = [DebateStatus.ongoing, DebateStatus.final_vote]
-        if debate.status not in allowed_statuses:
+        if debate_status not in allowed_statuses:
             raise HTTPException(status_code=400, detail="辩题当前不允许投票")
 
         # 3. 获取投票配置
@@ -262,8 +309,10 @@ class HybridVoteService:
 
             # Redis原子操作
             pipe.set(vote_key, json.dumps(vote_data))
-            pipe.srem(self._debate_position_key(debate_id, old_position), participant_id)
-            pipe.sadd(self._debate_position_key(debate_id, position.value), participant_id)
+            pipe.srem(self._debate_position_key(
+                debate_id, old_position), participant_id)
+            pipe.sadd(self._debate_position_key(
+                debate_id, position.value), participant_id)
 
             # 记录历史到Redis
             history_key = f"{vote_key}:history"
@@ -296,7 +345,8 @@ class HybridVoteService:
             # Redis原子操作
             pipe.set(vote_key, json.dumps(vote_data))
             pipe.sadd(self._debate_votes_key(debate_id), participant_id)
-            pipe.sadd(self._debate_position_key(debate_id, position.value), participant_id)
+            pipe.sadd(self._debate_position_key(
+                debate_id, position.value), participant_id)
 
             remaining_changes = max_vote_changes
 
@@ -408,22 +458,22 @@ class HybridVoteService:
         if not debate:
             raise HTTPException(status_code=404, detail="辩题不存在")
 
-        # 从Redis统计
-        total_votes = self.redis.scard(self._debate_votes_key(debate_id))  # type: ignore
-        pro_votes = self.redis.scard(self._debate_position_key(debate_id, "pro"))  # type: ignore
-        con_votes = self.redis.scard(self._debate_position_key(debate_id, "con"))  # type: ignore
-        abstain_votes = self.redis.scard(self._debate_position_key(debate_id, "abstain"))  # type: ignore
+        # 从Redis统计 (cast to int to satisfy type checker for clients that annotate SCARD as awaitable)
+        total_votes = int(cast(int, self.redis.scard(self._debate_votes_key(debate_id))))  # type: ignore
+        pro_votes = int(cast(int, self.redis.scard(self._debate_position_key(debate_id, "pro"))))  # type: ignore
+        con_votes = int(cast(int, self.redis.scard(self._debate_position_key(debate_id, "con"))))  # type: ignore
+        abstain_votes = int(cast(int, self.redis.scard(self._debate_position_key(debate_id, "abstain"))))  # type: ignore
 
         # 计算百分比
-        pro_percentage = (int(pro_votes) / int(total_votes) * 100) if total_votes > 0 else 0  # type: ignore
-        con_percentage = (int(con_votes) / int(total_votes) * 100) if total_votes > 0 else 0  # type: ignore
-        abstain_percentage = (int(abstain_votes) / int(total_votes) * 100) if total_votes > 0 else 0  # type: ignore
+        pro_percentage = (pro_votes / total_votes * 100) if total_votes > 0 else 0
+        con_percentage = (con_votes / total_votes * 100) if total_votes > 0 else 0
+        abstain_percentage = (abstain_votes / total_votes * 100) if total_votes > 0 else 0
 
         # 确定获胜方
         winner = None
-        if pro_votes > con_votes:  # type: ignore
+        if pro_votes > con_votes:
             winner = "pro"
-        elif con_votes > pro_votes:  # type: ignore
+        elif con_votes > pro_votes:
             winner = "con"
         else:
             winner = "tie"
@@ -435,10 +485,10 @@ class HybridVoteService:
 
         results = VoteResults(
             debateId=debate_id,
-            totalVotes=int(total_votes),  # type: ignore
-            proVotes=int(pro_votes),  # type: ignore
-            conVotes=int(con_votes),  # type: ignore
-            abstainVotes=int(abstain_votes),  # type: ignore
+            totalVotes=total_votes,
+            proVotes=pro_votes,
+            conVotes=con_votes,
+            abstainVotes=abstain_votes,
             proPercentage=round(pro_percentage, 2),
             conPercentage=round(con_percentage, 2),
             abstainPercentage=round(abstain_percentage, 2),
@@ -448,7 +498,8 @@ class HybridVoteService:
         )
 
         # 缓存结果（10秒）
-        self.redis.setex(cache_key, 10, json.dumps(results.__dict__, default=str))
+        self.redis.setex(cache_key, 10, json.dumps(
+            results.__dict__, default=str))
 
         return results
 
@@ -461,7 +512,8 @@ class HybridVoteService:
             raise HTTPException(status_code=404, detail="辩题不存在")
 
         # 获取所有投票者ID
-        participant_ids = self.redis.smembers(self._debate_votes_key(debate_id))
+        participant_ids = self.redis.smembers(
+            self._debate_votes_key(debate_id))
 
         # 删除Redis数据
         pipe = self.redis.pipeline()
@@ -533,7 +585,8 @@ class HybridVoteService:
         """同步单个辩题的投票数据（批量优化）"""
         try:
             # 获取Redis中的所有投票者
-            participant_ids = self.redis.smembers(self._debate_votes_key(debate_id))
+            participant_ids = self.redis.smembers(
+                self._debate_votes_key(debate_id))
             if not participant_ids:
                 return
 
@@ -550,14 +603,16 @@ class HybridVoteService:
                 return
 
             # 批量查询数据库中的现有投票（一次查询）
-            participant_ids_list = [v['participant_id'] for v in vote_data_list]
+            participant_ids_list = [v['participant_id']
+                                    for v in vote_data_list]
             existing_votes = db.query(Vote).filter(
                 Vote.debate_id == debate_id,
                 Vote.participant_id.in_(participant_ids_list)
             ).all()
 
             # 创建映射表：participant_id -> existing_vote
-            existing_votes_map = {str(v.participant_id): v for v in existing_votes}
+            existing_votes_map = {
+                str(v.participant_id): v for v in existing_votes}
 
             # 批量处理更新和插入
             updates = []
@@ -569,7 +624,8 @@ class HybridVoteService:
 
                 if existing_vote:
                     # 检查是否需要更新
-                    redis_updated_at = datetime.fromisoformat(vote_data['updated_at'])
+                    redis_updated_at = datetime.fromisoformat(
+                        vote_data['updated_at'])
                     db_updated_at = getattr(existing_vote, 'updated_at', None)
 
                     if db_updated_at is None or redis_updated_at > db_updated_at:
@@ -589,8 +645,10 @@ class HybridVoteService:
                         position=VotePosition(vote_data['position']),
                         change_count=vote_data['change_count'],
                         is_final=vote_data['is_final'],
-                        created_at=datetime.fromisoformat(vote_data['created_at']),
-                        updated_at=datetime.fromisoformat(vote_data['updated_at'])
+                        created_at=datetime.fromisoformat(
+                            vote_data['created_at']),
+                        updated_at=datetime.fromisoformat(
+                            vote_data['updated_at'])
                     )
                     inserts.append(new_vote)
 

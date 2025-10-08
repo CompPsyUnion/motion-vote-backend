@@ -279,6 +279,12 @@ async def update_debate(
     # 重新获取更新后的辩题
     updated_debate = db.query(Debate).filter(Debate.id == debate_id).first()
 
+    # 如果更新了activity_id或status,清除Redis缓存
+    if 'activity_id' in update_data or 'status' in update_data:
+        from src.services.hybrid_vote_service import HybridVoteService
+        service = HybridVoteService(db)
+        service.invalidate_debate_cache(debate_id)
+
     return {
         "success": True,
         "message": "更新辩题成功"
@@ -337,6 +343,11 @@ async def update_debate_status(
     # 更新状态
     setattr(debate, 'status', status_data.status)
     db.commit()
+
+    # 清除Redis缓存
+    from src.services.hybrid_vote_service import HybridVoteService
+    service = HybridVoteService(db)
+    service.invalidate_debate_cache(debate_id)
 
     return {"message": "Debate status updated successfully"}
 

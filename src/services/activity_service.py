@@ -243,6 +243,12 @@ class ActivityService:
         self.db.commit()
         self.db.refresh(activity)
 
+        # 如果更新了settings,清除Redis缓存
+        if 'settings' in update_data:
+            from src.services.hybrid_vote_service import HybridVoteService
+            vote_service = HybridVoteService(self.db)
+            vote_service.invalidate_activity_config_cache(activity_id)
+
         return ActivityResponse.model_validate(activity)
 
     def delete_activity(self, activity_id: str, user_id: str) -> dict:

@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from src.core.database import SessionLocal
 from src.core.redis import get_redis
 from src.core.websocket import manager
 from src.models.activity import Activity
@@ -505,6 +506,8 @@ class HybridVoteService:
     async def _sync_redis_to_database(self):
         """将Redis中的脏数据同步到数据库"""
         async with HybridVoteService._sync_lock:
+            # 创建独立的数据库会话
+            db = SessionLocal()
             try:
                 # 获取所有需要同步的辩题ID
                 dirty_debates = self.redis.smembers(self._dirty_debates_key())
@@ -514,7 +517,7 @@ class HybridVoteService:
                 print(f"开始同步 {len(dirty_debates)} 个辩题的投票数据...")  # type: ignore
 
                 for debate_id in dirty_debates:  # type: ignore
-                    await self._sync_debate_votes(str(debate_id))
+                    await self._sync_debate_votes(str(debate_id), db)
 
                 # 清空脏标记
                 self.redis.delete(self._dirty_debates_key())
@@ -522,8 +525,10 @@ class HybridVoteService:
 
             except Exception as e:
                 print(f"同步失败: {e}")
+            finally:
+                db.close()
 
-    async def _sync_debate_votes(self, debate_id: str):
+    async def _sync_debate_votes(self, debate_id: str, db: Session):
         """同步单个辩题的投票数据"""
         try:
             # 获取Redis中的所有投票者
@@ -539,7 +544,7 @@ class HybridVoteService:
                 vote_data = json.loads(str(vote_data_str))
 
                 # 查找数据库中的现有投票
-                existing_vote = self.db.query(Vote).filter(
+                existing_vote = db.query(Vote).filter(
                     Vote.debate_id == debate_id,
                     Vote.participant_id == vote_data['participant_id']
                 ).first()
@@ -551,7 +556,7 @@ class HybridVoteService:
                     db_updated_at = getattr(existing_vote, 'updated_at', None)
 
                     if db_updated_at is None or redis_updated_at > db_updated_at:
-                        self.db.execute(
+                        db.execute(
                             text("""
                                 UPDATE votes 
                                 SET position = :position,
@@ -580,10 +585,10 @@ class HybridVoteService:
                         created_at=datetime.fromisoformat(vote_data['created_at']),
                         updated_at=datetime.fromisoformat(vote_data['updated_at'])
                     )
-                    self.db.add(new_vote)
+                    db.add(new_vote)
 
-            self.db.commit()
+            db.commit()
 
         except Exception as e:
             print(f"同步辩题 {debate_id} 失败: {e}")
-            self.db.rollback()
+            db.rollback()

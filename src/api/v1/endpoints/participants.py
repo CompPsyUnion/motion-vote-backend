@@ -107,14 +107,38 @@ async def create_participant(
 @router.post("/{activity_id}/participants/batch", response_model=ParticipantBatchImportResult)
 async def batch_import_participants(
     activity_id: str,
-    file: UploadFile = File(..., description="Excel文件"),
+    file: UploadFile = File(..., description="Excel或CSV文件"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """通过Excel文件批量导入参与者"""
-    if not file.filename or not file.filename.endswith(('.xlsx', '.xls')):
+    """通过Excel或CSV文件批量导入参与者
+    
+    支持的文件格式：
+    - Excel: .xlsx, .xls
+    - CSV: .csv (支持UTF-8、GBK等编码)
+    
+    文件格式要求：
+    - 第一行为标题行（会被跳过）
+    - 数据列：姓名（必填）、手机号（可选）、备注（可选）
+    - CSV文件建议使用UTF-8编码保存
+    
+    示例：
+    ```
+    姓名,手机号,备注
+    张三,13800138000,VIP会员
+    李四,13900139000,
+    王五,,普通参与者
+    ```
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="未提供文件")
+    
+    filename_lower = file.filename.lower()
+    if not filename_lower.endswith(('.xlsx', '.xls', '.csv')):
         raise HTTPException(
-            status_code=400, detail="只支持Excel文件格式(.xlsx, .xls)")
+            status_code=400, 
+            detail="不支持的文件格式，请上传Excel文件(.xlsx, .xls)或CSV文件(.csv)"
+        )
 
     service = ParticipantService(db)
     return service.batch_import_participants(
@@ -142,4 +166,40 @@ async def export_participants(
         media_type="text/csv",
         headers={
             "Content-Disposition": f"attachment; filename=participants_{activity_id}.csv"}
+    )
+
+
+@router.get("/{activity_id}/participants/template")
+async def download_import_template(
+    activity_id: str,
+    format: str = Query(default="csv", description="模板格式 (csv|excel)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """下载参与者导入模板
+    
+    Args:
+        activity_id: 活动ID
+        format: 模板格式，可选值: csv, excel
+    
+    Returns:
+        CSV或Excel格式的模板文件
+    """
+    service = ParticipantService(db)
+    
+    if format.lower() == "excel":
+        template_data, media_type, filename = service.generate_excel_template(
+            activity_id=activity_id,
+            user_id=str(current_user.id)
+        )
+    else:
+        template_data, media_type, filename = service.generate_csv_template(
+            activity_id=activity_id,
+            user_id=str(current_user.id)
+        )
+    
+    return StreamingResponse(
+        io.BytesIO(template_data),
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )

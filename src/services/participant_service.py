@@ -160,18 +160,140 @@ class ParticipantService:
         file: UploadFile,
         user_id: str
     ) -> ParticipantBatchImportResult:
-        """批量导入参与者"""
+        """批量导入参与者，支持Excel和CSV格式"""
         # 检查权限
         self._check_activity_permission(activity_id, user_id)
 
-        # 读取Excel文件
+        filename = file.filename or ""
+        is_csv = filename.lower().endswith('.csv')
+        is_excel = filename.lower().endswith(('.xlsx', '.xls'))
+
+        if not is_csv and not is_excel:
+            raise HTTPException(
+                status_code=400, 
+                detail="不支持的文件格式，请上传CSV或Excel文件"
+            )
+
         try:
             contents = file.file.read()
+            
+            if is_csv:
+                return self._import_from_csv(activity_id, contents)
+            else:
+                return self._import_from_excel(activity_id, contents)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=400, detail=f"文件处理错误: {str(e)}")
+
+    def _import_from_csv(
+        self,
+        activity_id: str,
+        contents: bytes
+    ) -> ParticipantBatchImportResult:
+        """从CSV文件导入参与者"""
+        total = success = failed = 0
+        errors = []
+
+        try:
+            # 尝试不同的编码
+            text_content = None
+            for encoding in ['utf-8-sig', 'utf-8', 'gbk', 'gb2312', 'gb18030']:
+                try:
+                    text_content = contents.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if text_content is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="无法识别文件编码，请使用UTF-8或GBK编码保存CSV文件"
+                )
+
+            # 解析CSV
+            csv_file = io.StringIO(text_content)
+            reader = csv.reader(csv_file)
+            
+            # 跳过标题行
+            next(reader, None)
+            
+            # 处理每一行
+            for idx, row in enumerate(reader, start=2):
+                if not row or not any(row):
+                    continue
+
+                total += 1
+                
+                # 提取数据（姓名、手机号、备注）
+                name = row[0].strip() if len(row) > 0 and row[0] else ""
+                phone = row[1].strip() if len(row) > 1 and row[1] else None
+                note = row[2].strip() if len(row) > 2 and row[2] else None
+
+                # 验证姓名
+                if not name:
+                    errors.append(f"第{idx}行：姓名不能为空")
+                    failed += 1
+                    continue
+
+                # 检查重复
+                existing = self.db.query(Participant).filter(
+                    and_(
+                        Participant.activity_id == activity_id,
+                        Participant.name == name
+                    )
+                ).first()
+                
+                if existing:
+                    errors.append(f"第{idx}行：参与者 {name} 已存在")
+                    failed += 1
+                    continue
+
+                # 创建参与者
+                try:
+                    code = self._generate_participant_code(activity_id)
+                    participant = Participant(
+                        activity_id=activity_id,
+                        code=code,
+                        name=name,
+                        phone=phone if phone else None,
+                        note=note if note else None
+                    )
+                    self.db.add(participant)
+                    success += 1
+                except Exception as e:
+                    errors.append(f"第{idx}行：{str(e)}")
+                    failed += 1
+
+            # 提交事务
+            if success > 0:
+                self.db.commit()
+            
+            return ParticipantBatchImportResult(
+                total=total,
+                success=success,
+                failed=failed,
+                errors=errors[:10]  # 只返回前10个错误
+            )
+
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=400, detail=f"CSV文件处理错误: {str(e)}")
+
+    def _import_from_excel(
+        self,
+        activity_id: str,
+        contents: bytes
+    ) -> ParticipantBatchImportResult:
+        """从Excel文件导入参与者"""
+        total = success = failed = 0
+        errors = []
+
+        try:
             workbook = load_workbook(io.BytesIO(contents))
             worksheet = workbook.active
-
-            total = success = failed = 0
-            errors = []
 
             if worksheet is None:
                 return ParticipantBatchImportResult(
@@ -184,35 +306,40 @@ class ParticipantService:
                     continue
 
                 total += 1
+                
+                # 提取数据
                 name = str(row[0]).strip() if row[0] else ""
-                phone = str(row[1]).strip() if len(
-                    row) > 1 and row[1] else None
+                phone = str(row[1]).strip() if len(row) > 1 and row[1] else None
                 note = str(row[2]).strip() if len(row) > 2 and row[2] else None
 
+                # 验证姓名
                 if not name:
                     errors.append(f"第{idx}行：姓名不能为空")
                     failed += 1
                     continue
 
+                # 检查重复
                 existing = self.db.query(Participant).filter(
                     and_(
                         Participant.activity_id == activity_id,
                         Participant.name == name
                     )
                 ).first()
+                
                 if existing:
                     errors.append(f"第{idx}行：参与者 {name} 已存在")
                     failed += 1
                     continue
 
+                # 创建参与者
                 try:
                     code = self._generate_participant_code(activity_id)
                     participant = Participant(
                         activity_id=activity_id,
                         code=code,
                         name=name,
-                        phone=phone,
-                        note=note
+                        phone=phone if phone else None,
+                        note=note if note else None
                     )
                     self.db.add(participant)
                     success += 1
@@ -220,6 +347,7 @@ class ParticipantService:
                     errors.append(f"第{idx}行：{str(e)}")
                     failed += 1
 
+            # 提交事务
             if success > 0:
                 self.db.commit()
 
@@ -227,12 +355,12 @@ class ParticipantService:
                 total=total,
                 success=success,
                 failed=failed,
-                errors=errors[:10]
+                errors=errors[:10]  # 只返回前10个错误
             )
 
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=400, detail=f"文件处理错误: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Excel文件处理错误: {str(e)}")
 
     def export_participants(self, activity_id: str, user_id: str) -> bytes:
         """导出参与者数据为CSV"""
@@ -296,6 +424,108 @@ class ParticipantService:
 
         # 添加BOM以确保Excel正确显示中文
         return '\ufeff'.encode('utf-8') + csv_content.encode('utf-8')
+
+    def generate_csv_template(
+        self,
+        activity_id: str,
+        user_id: str
+    ) -> tuple[bytes, str, str]:
+        """生成CSV导入模板
+        
+        Returns:
+            tuple: (模板数据, MIME类型, 文件名)
+        """
+        # 检查权限
+        self._check_activity_permission(activity_id, user_id)
+        
+        # 创建CSV内容
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # 写入标题行
+        writer.writerow(["姓名", "手机号", "备注"])
+        
+        # 写入示例数据
+        writer.writerow(["张三", "13800138000", "VIP会员"])
+        writer.writerow(["李四", "13900139000", ""])
+        writer.writerow(["王五", "", "普通参与者"])
+        
+        # 转换为字节（添加BOM以确保Excel正确显示中文）
+        csv_content = output.getvalue()
+        output.close()
+        
+        template_data = '\ufeff'.encode('utf-8') + csv_content.encode('utf-8')
+        
+        return (
+            template_data,
+            "text/csv",
+            f"participant_import_template_{activity_id}.csv"
+        )
+
+    def generate_excel_template(
+        self,
+        activity_id: str,
+        user_id: str
+    ) -> tuple[bytes, str, str]:
+        """生成Excel导入模板
+        
+        Returns:
+            tuple: (模板数据, MIME类型, 文件名)
+        """
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        
+        # 检查权限
+        self._check_activity_permission(activity_id, user_id)
+        
+        # 创建工作簿
+        wb = Workbook()
+        ws = wb.active
+        
+        if ws is None:
+            raise HTTPException(status_code=500, detail="创建工作表失败")
+        
+        ws.title = "参与者导入模板"
+        
+        # 设置标题行样式
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        
+        # 写入标题行
+        headers = ["姓名", "手机号", "备注"]
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+        
+        # 写入示例数据
+        example_data = [
+            ["张三", "13800138000", "VIP会员"],
+            ["李四", "13900139000", ""],
+            ["王五", "", "普通参与者"]
+        ]
+        
+        for row_num, row_data in enumerate(example_data, 2):
+            for col_num, value in enumerate(row_data, 1):
+                ws.cell(row=row_num, column=col_num, value=value)
+        
+        # 设置列宽
+        ws.column_dimensions['A'].width = 15
+        ws.column_dimensions['B'].width = 20
+        ws.column_dimensions['C'].width = 30
+        
+        # 保存到字节流
+        excel_file = io.BytesIO()
+        wb.save(excel_file)
+        excel_file.seek(0)
+        
+        return (
+            excel_file.getvalue(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            f"participant_import_template_{activity_id}.xlsx"
+        )
 
     def generate_participant_link(self, participant_id: str, user_id: str) -> dict:
         """生成参与者链接参数

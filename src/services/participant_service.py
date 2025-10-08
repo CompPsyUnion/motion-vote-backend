@@ -162,19 +162,21 @@ class ParticipantService:
         2. 导出文件格式：编号,姓名,手机号,备注,是否入场,入场时间,创建时间
         
         Returns:
-            dict: {'name': int, 'phone': int, 'note': int} 列索引映射
+            dict: {'id': int, 'name': int, 'phone': int, 'note': int} 列索引映射
         """
         # 标准化标题（去除空格和引号）
         headers = [h.strip().strip('"').strip("'") for h in header_row]
         
         # 初始化列映射
         column_mapping = {
-            'name': -1,
-            'phone': -1,
-            'note': -1
+            'id': -1,      # 编号/ID
+            'name': -1,    # 姓名
+            'phone': -1,   # 手机号
+            'note': -1     # 备注
         }
         
         # 可能的列名匹配
+        id_keywords = ['编号', 'id', 'code', '序号', '参与者编号']
         name_keywords = ['姓名', 'name', '名字', '参与者']
         phone_keywords = ['手机', 'phone', '电话', '手机号', '联系方式', '联系电话']
         note_keywords = ['备注', 'note', '说明', '备注信息', '描述']
@@ -182,6 +184,13 @@ class ParticipantService:
         # 查找每个字段的列索引
         for idx, header in enumerate(headers):
             header_lower = header.lower()
+            
+            # 匹配编号列
+            if column_mapping['id'] == -1:
+                for keyword in id_keywords:
+                    if keyword in header or keyword in header_lower:
+                        column_mapping['id'] = idx
+                        break
             
             # 匹配姓名列
             if column_mapping['name'] == -1:
@@ -207,13 +216,14 @@ class ParticipantService:
         # 如果没有找到姓名列，尝试使用默认位置
         if column_mapping['name'] == -1:
             # 检查是否是导出格式（编号,姓名,手机号,备注...）
-            if len(headers) >= 7 and ('编号' in headers[0] or 'code' in headers[0].lower()):
+            if len(headers) >= 7 and ('编号' in headers[0] or 'code' in headers[0].lower() or 'id' in headers[0].lower()):
                 # 导出文件格式
+                column_mapping['id'] = 0    # 编号在第1列
                 column_mapping['name'] = 1  # 姓名在第2列
                 column_mapping['phone'] = 2  # 手机号在第3列
                 column_mapping['note'] = 3  # 备注在第4列
             elif len(headers) >= 3:
-                # 导入模板格式
+                # 导入模板格式（没有编号列）
                 column_mapping['name'] = 0  # 姓名在第1列
                 column_mapping['phone'] = 1  # 手机号在第2列
                 column_mapping['note'] = 2  # 备注在第3列
@@ -324,6 +334,11 @@ class ParticipantService:
                 
                 # 根据列映射提取数据
                 try:
+                    # 提取编号（如果有）
+                    participant_id = None
+                    if column_mapping['id'] != -1 and len(row) > column_mapping['id'] and row[column_mapping['id']]:
+                        participant_id = row[column_mapping['id']].strip()
+                    
                     name = row[column_mapping['name']].strip() if len(row) > column_mapping['name'] and row[column_mapping['name']] else ""
                     phone = row[column_mapping['phone']].strip() if len(row) > column_mapping['phone'] and row[column_mapping['phone']] else None
                     note = row[column_mapping['note']].strip() if len(row) > column_mapping['note'] and row[column_mapping['note']] else None
@@ -353,7 +368,12 @@ class ParticipantService:
 
                 # 创建参与者
                 try:
-                    code = self._generate_participant_code(activity_id)
+                    # 如果提供了编号，使用提供的编号，否则自动生成
+                    if participant_id:
+                        code = participant_id
+                    else:
+                        code = self._generate_participant_code(activity_id)
+                    
                     participant = Participant(
                         activity_id=activity_id,
                         code=code,
@@ -428,6 +448,11 @@ class ParticipantService:
                 
                 # 根据列映射提取数据
                 try:
+                    # 提取编号（如果有）
+                    participant_id = None
+                    if column_mapping['id'] != -1 and len(row) > column_mapping['id'] and row[column_mapping['id']]:
+                        participant_id = str(row[column_mapping['id']]).strip()
+                    
                     name = str(row[column_mapping['name']]).strip() if len(row) > column_mapping['name'] and row[column_mapping['name']] else ""
                     phone = str(row[column_mapping['phone']]).strip() if len(row) > column_mapping['phone'] and row[column_mapping['phone']] else None
                     note = str(row[column_mapping['note']]).strip() if len(row) > column_mapping['note'] and row[column_mapping['note']] else None
@@ -457,7 +482,12 @@ class ParticipantService:
 
                 # 创建参与者
                 try:
-                    code = self._generate_participant_code(activity_id)
+                    # 如果提供了编号，使用提供的编号，否则自动生成
+                    if participant_id:
+                        code = participant_id
+                    else:
+                        code = self._generate_participant_code(activity_id)
+                    
                     participant = Participant(
                         activity_id=activity_id,
                         code=code,

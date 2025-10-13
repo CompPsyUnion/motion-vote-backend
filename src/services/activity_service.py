@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 from src.models.activity import Activity, Collaborator
 from src.models.debate import Debate
 from src.models.user import User
-from src.models.vote import Vote
+from src.models.vote import Participant, Vote
 from src.schemas.activity import (ActivityCreate, ActivityDetail,
                                   ActivityDetailStatistics, ActivityResponse,
                                   ActivityStatus, ActivityUpdate,
@@ -407,9 +407,17 @@ class ActivityService:
 
     def _get_activity_statistics(self, activity_id: str) -> ActivityDetailStatistics:
         """获取活动统计信息"""
-        # TODO: 参与者模型暂未创建，使用临时值
-        total_participants = 0
-        checked_in_participants = 0
+        # 获取参与者统计
+        total_participants = self.db.query(Participant)\
+            .filter(Participant.activity_id == activity_id)\
+            .count()
+
+        checked_in_participants = self.db.query(Participant)\
+            .filter(
+                Participant.activity_id == activity_id,
+                Participant.checked_in == True
+        )\
+            .count()
 
         # 总投票数
         total_votes = self.db.query(Vote)\

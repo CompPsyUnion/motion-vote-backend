@@ -14,6 +14,7 @@ from src.schemas.debate import (CurrentDebateUpdate, DebateCreate,
                                 DebateResponse, DebateStatusUpdate,
                                 DebateUpdate, VoteStats)
 from src.schemas.vote import VotePosition
+from src.schemas.base import ApiResponse
 
 router = APIRouter()
 

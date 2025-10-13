@@ -8,9 +8,10 @@ from typing import List
 from fastapi import HTTPException
 from sqlalchemy import and_, desc, func
 from sqlalchemy.orm import Session
-from src.models.activity import Activity
+from src.models.activity import Activity, Collaborator
 from src.models.debate import Debate
 from src.models.vote import Participant, Vote
+from src.schemas.activity import CollaboratorStatus
 from src.schemas.statistics import (ActivityReport, ActivitySummary,
                                     ActivityType, DashboardData, DebateResult,
                                     DebateStats, ExportType, RealTimeStats,
@@ -28,10 +29,20 @@ class StatisticsService:
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-        # 检查是否是活动拥有者或协作者（简化检查）
+        # 检查是否是活动拥有者或协作者
         if str(activity.owner_id) != str(user_id):
-            # TODO: 检查是否是协作者
-            pass
+            # 检查是否是已接受的协作者
+            collaborator = self.db.query(Collaborator).filter(
+                Collaborator.activity_id == activity_id,
+                Collaborator.user_id == user_id,
+                Collaborator.status == CollaboratorStatus.accepted
+            ).first()
+
+            if not collaborator:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You don't have permission to access this activity"
+                )
 
         return activity
 

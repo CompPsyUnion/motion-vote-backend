@@ -7,8 +7,10 @@ from fastapi import HTTPException, UploadFile
 from openpyxl import load_workbook
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
-from src.models.activity import Activity
-from src.models.vote import Participant
+from src.models.activity import Activity, Collaborator
+from src.models.debate import Debate
+from src.models.vote import Participant, Vote
+from src.schemas.activity import CollaboratorStatus
 from src.schemas.participant import (PaginatedParticipants,
                                      ParticipantBatchImportResult,
                                      ParticipantCreate, ParticipantResponse)
@@ -25,10 +27,20 @@ class ParticipantService:
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-        # 检查是否是活动拥有者或协作者（简化检查）
+        # 检查是否是活动拥有者或协作者
         if str(activity.owner_id) != str(user_id):
-            # TODO: 检查是否是协作者
-            pass
+            # 检查是否是已接受的协作者
+            collaborator = self.db.query(Collaborator).filter(
+                Collaborator.activity_id == activity_id,
+                Collaborator.user_id == user_id,
+                Collaborator.status == CollaboratorStatus.accepted
+            ).first()
+
+            if not collaborator:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You don't have permission to access this activity"
+                )
 
         return activity
 
@@ -156,17 +168,17 @@ class ParticipantService:
 
     def _detect_csv_format(self, header_row: list) -> dict:
         """智能识别CSV文件格式，返回列索引映射
-        
+
         支持的格式：
         1. 导入模板格式：姓名,手机号,备注
         2. 导出文件格式：编号,姓名,手机号,备注,是否入场,入场时间,创建时间
-        
+
         Returns:
             dict: {'id': int, 'name': int, 'phone': int, 'note': int} 列索引映射
         """
         # 标准化标题（去除空格和引号）
         headers = [h.strip().strip('"').strip("'") for h in header_row]
-        
+
         # 初始化列映射
         column_mapping = {
             'id': -1,      # 编号/ID
@@ -174,45 +186,45 @@ class ParticipantService:
             'phone': -1,   # 手机号
             'note': -1     # 备注
         }
-        
+
         # 可能的列名匹配
         id_keywords = ['编号', 'id', 'code', '序号', '参与者编号']
         name_keywords = ['姓名', 'name', '名字', '参与者']
         phone_keywords = ['手机', 'phone', '电话', '手机号', '联系方式', '联系电话']
         note_keywords = ['备注', 'note', '说明', '备注信息', '描述']
-        
+
         # 查找每个字段的列索引
         for idx, header in enumerate(headers):
             header_lower = header.lower()
-            
+
             # 匹配编号列
             if column_mapping['id'] == -1:
                 for keyword in id_keywords:
                     if keyword in header or keyword in header_lower:
                         column_mapping['id'] = idx
                         break
-            
+
             # 匹配姓名列
             if column_mapping['name'] == -1:
                 for keyword in name_keywords:
                     if keyword in header or keyword in header_lower:
                         column_mapping['name'] = idx
                         break
-            
+
             # 匹配手机号列
             if column_mapping['phone'] == -1:
                 for keyword in phone_keywords:
                     if keyword in header or keyword in header_lower:
                         column_mapping['phone'] = idx
                         break
-            
+
             # 匹配备注列
             if column_mapping['note'] == -1:
                 for keyword in note_keywords:
                     if keyword in header or keyword in header_lower:
                         column_mapping['note'] = idx
                         break
-        
+
         # 如果没有找到姓名列，尝试使用默认位置
         if column_mapping['name'] == -1:
             # 检查是否是导出格式（编号,姓名,手机号,备注...）
@@ -232,21 +244,21 @@ class ParticipantService:
                     status_code=400,
                     detail="无法识别文件格式，请确保包含姓名、手机号、备注列"
                 )
-        
+
         # 验证姓名列是否找到
         if column_mapping['name'] == -1:
             raise HTTPException(
                 status_code=400,
                 detail="未找到姓名列，请确保CSV文件包含'姓名'列"
             )
-        
+
         # 手机号和备注列是可选的，如果没找到则使用默认值
         if column_mapping['phone'] == -1:
             column_mapping['phone'] = column_mapping['name'] + 1
-        
+
         if column_mapping['note'] == -1:
             column_mapping['note'] = column_mapping['name'] + 2
-        
+
         return column_mapping
 
     def batch_import_participants(
@@ -265,13 +277,13 @@ class ParticipantService:
 
         if not is_csv and not is_excel:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="不支持的文件格式，请上传CSV或Excel文件"
             )
 
         try:
             contents = file.file.read()
-            
+
             if is_csv:
                 return self._import_from_csv(activity_id, contents)
             else:
@@ -289,7 +301,7 @@ class ParticipantService:
         contents: bytes
     ) -> ParticipantBatchImportResult:
         """从CSV文件导入参与者
-        
+
         支持两种格式：
         1. 导入模板格式：姓名,手机号,备注
         2. 导出文件格式：编号,姓名,手机号,备注,是否入场,入场时间,创建时间
@@ -306,7 +318,7 @@ class ParticipantService:
                     break
                 except UnicodeDecodeError:
                     continue
-            
+
             if text_content is None:
                 raise HTTPException(
                     status_code=400,
@@ -316,32 +328,35 @@ class ParticipantService:
             # 解析CSV
             csv_file = io.StringIO(text_content)
             reader = csv.reader(csv_file)
-            
+
             # 读取标题行以确定格式
             header_row = next(reader, None)
             if not header_row:
                 raise HTTPException(status_code=400, detail="文件为空或格式错误")
-            
+
             # 智能识别列映射
             column_mapping = self._detect_csv_format(header_row)
-            
+
             # 处理每一行
             for idx, row in enumerate(reader, start=2):
                 if not row or not any(row):
                     continue
 
                 total += 1
-                
+
                 # 根据列映射提取数据
                 try:
                     # 提取编号（如果有）
                     participant_id = None
                     if column_mapping['id'] != -1 and len(row) > column_mapping['id'] and row[column_mapping['id']]:
                         participant_id = row[column_mapping['id']].strip()
-                    
-                    name = row[column_mapping['name']].strip() if len(row) > column_mapping['name'] and row[column_mapping['name']] else ""
-                    phone = row[column_mapping['phone']].strip() if len(row) > column_mapping['phone'] and row[column_mapping['phone']] else None
-                    note = row[column_mapping['note']].strip() if len(row) > column_mapping['note'] and row[column_mapping['note']] else None
+
+                    name = row[column_mapping['name']].strip() if len(
+                        row) > column_mapping['name'] and row[column_mapping['name']] else ""
+                    phone = row[column_mapping['phone']].strip() if len(
+                        row) > column_mapping['phone'] and row[column_mapping['phone']] else None
+                    note = row[column_mapping['note']].strip() if len(
+                        row) > column_mapping['note'] and row[column_mapping['note']] else None
                 except IndexError:
                     errors.append(f"第{idx}行：列数不足，请检查文件格式")
                     failed += 1
@@ -360,7 +375,7 @@ class ParticipantService:
                         Participant.name == name
                     )
                 ).first()
-                
+
                 if existing:
                     errors.append(f"第{idx}行：参与者 {name} 已存在")
                     failed += 1
@@ -373,7 +388,7 @@ class ParticipantService:
                         code = participant_id
                     else:
                         code = self._generate_participant_code(activity_id)
-                    
+
                     participant = Participant(
                         activity_id=activity_id,
                         code=code,
@@ -390,7 +405,7 @@ class ParticipantService:
             # 提交事务
             if success > 0:
                 self.db.commit()
-            
+
             return ParticipantBatchImportResult(
                 total=total,
                 success=success,
@@ -408,7 +423,7 @@ class ParticipantService:
         contents: bytes
     ) -> ParticipantBatchImportResult:
         """从Excel文件导入参与者
-        
+
         支持两种格式：
         1. 导入模板格式：姓名,手机号,备注
         2. 导出文件格式：编号,姓名,手机号,备注,是否入场,入场时间,创建时间
@@ -428,14 +443,15 @@ class ParticipantService:
             # 读取标题行以确定格式
             header_row = None
             for row in worksheet.iter_rows(min_row=1, max_row=1, values_only=True):
-                header_row = [str(cell) if cell is not None else "" for cell in row]
+                header_row = [
+                    str(cell) if cell is not None else "" for cell in row]
                 break
-            
+
             if not header_row:
                 return ParticipantBatchImportResult(
                     total=0, success=0, failed=0, errors=["未找到标题行"]
                 )
-            
+
             # 智能识别列映射
             column_mapping = self._detect_csv_format(header_row)
 
@@ -445,17 +461,20 @@ class ParticipantService:
                     continue
 
                 total += 1
-                
+
                 # 根据列映射提取数据
                 try:
                     # 提取编号（如果有）
                     participant_id = None
                     if column_mapping['id'] != -1 and len(row) > column_mapping['id'] and row[column_mapping['id']]:
                         participant_id = str(row[column_mapping['id']]).strip()
-                    
-                    name = str(row[column_mapping['name']]).strip() if len(row) > column_mapping['name'] and row[column_mapping['name']] else ""
-                    phone = str(row[column_mapping['phone']]).strip() if len(row) > column_mapping['phone'] and row[column_mapping['phone']] else None
-                    note = str(row[column_mapping['note']]).strip() if len(row) > column_mapping['note'] and row[column_mapping['note']] else None
+
+                    name = str(row[column_mapping['name']]).strip() if len(
+                        row) > column_mapping['name'] and row[column_mapping['name']] else ""
+                    phone = str(row[column_mapping['phone']]).strip() if len(
+                        row) > column_mapping['phone'] and row[column_mapping['phone']] else None
+                    note = str(row[column_mapping['note']]).strip() if len(
+                        row) > column_mapping['note'] and row[column_mapping['note']] else None
                 except IndexError:
                     errors.append(f"第{idx}行：列数不足，请检查文件格式")
                     failed += 1
@@ -474,7 +493,7 @@ class ParticipantService:
                         Participant.name == name
                     )
                 ).first()
-                
+
                 if existing:
                     errors.append(f"第{idx}行：参与者 {name} 已存在")
                     failed += 1
@@ -487,7 +506,7 @@ class ParticipantService:
                         code = participant_id
                     else:
                         code = self._generate_participant_code(activity_id)
-                    
+
                     participant = Participant(
                         activity_id=activity_id,
                         code=code,
@@ -514,7 +533,8 @@ class ParticipantService:
 
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=400, detail=f"Excel文件处理错误: {str(e)}")
+            raise HTTPException(
+                status_code=400, detail=f"Excel文件处理错误: {str(e)}")
 
     def export_participants(self, activity_id: str, user_id: str) -> bytes:
         """导出参与者数据为CSV"""
@@ -633,12 +653,27 @@ class ParticipantService:
         activity = self.db.query(Activity).filter(
             Activity.id == activity_id).first()
 
+        # 获取当前辩题
+        current_debate = None
+        current_debate_id = getattr(
+            activity, 'current_debate_id', None) if activity else None
+        if activity and current_debate_id:
+            current_debate_obj = self.db.query(Debate).filter(
+                Debate.id == current_debate_id
+            ).first()
+            if current_debate_obj:
+                current_debate = {
+                    "id": str(current_debate_obj.id),
+                    "title": str(current_debate_obj.title),
+                    "status": current_debate_obj.status.value
+                }
+
         activity_info = {
             "activity": {
                 "id": str(activity.id) if activity else "",
                 "name": str(activity.name) if activity else "",
                 "status": activity.status.value if activity else "unknown",
-                "current_debate": None  # TODO: 获取当前辩题
+                "current_debate": current_debate
             },
             "participant": {
                 "id": str(participant.id),
@@ -647,11 +682,45 @@ class ParticipantService:
             }
         }
 
+        # 检查当前辩题的投票状态
+        has_voted = False
+        vote_position = None
+        voted_at = None
+        remaining_changes = 3  # 默认值
+
+        if activity and current_debate_id:
+            # 查询当前辩题的投票记录
+            current_vote = self.db.query(Vote).filter(
+                and_(
+                    Vote.participant_id == participant.id,
+                    Vote.debate_id == current_debate_id
+                )
+            ).first()
+
+            if current_vote:
+                has_voted = True
+                position_attr = getattr(current_vote, 'position', None)
+                vote_position = position_attr.value if position_attr else None
+                created_attr = getattr(current_vote, 'created_at', None)
+                voted_at = created_attr.isoformat() if created_attr else None
+
+            # 从活动设置中获取最大改票次数
+            settings = getattr(activity, 'settings', None)
+            if settings:
+                remaining_changes = settings.get(
+                    'max_vote_changes', settings.get('maxVoteChanges', 3))
+
+                # 如果已投票，计算剩余改票次数
+                if current_vote:
+                    change_count = getattr(current_vote, 'change_count', 0)
+                    remaining_changes = max(
+                        0, remaining_changes - change_count)
+
         vote_status = {
-            "has_voted": False,  # TODO: 检查投票状态
-            "position": None,
-            "voted_at": None,
-            "remaining_changes": 3,  # TODO: 从设置中获取
+            "has_voted": has_voted,
+            "position": vote_position,
+            "voted_at": voted_at,
+            "remaining_changes": remaining_changes,
             "can_vote": True,
             "can_change": True
         }

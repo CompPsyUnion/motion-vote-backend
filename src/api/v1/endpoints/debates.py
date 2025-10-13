@@ -388,7 +388,7 @@ async def reorder_debates(
     }
 
 
-@router.get("/activities/{activity_id}/current-debate", response_model=DebateDetailResponse)
+@router.get("/activities/{activity_id}/current-debate", response_model=ApiResponse)
 async def get_current_debate(
     activity_id: str,
     db: Session = Depends(get_db)
@@ -416,10 +416,11 @@ async def get_current_debate(
         vote_stats=vote_stats
     )
 
+    # 返回时将内部 Pydantic 模型序列化为使用别名的 dict
     return {
         "success": True,
         "message": "获取当前辩题成功",
-        "data": debate_detail
+        "data": debate_detail.model_dump(by_alias=True)
     }
 
 

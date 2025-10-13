@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -25,6 +25,10 @@ class ApiResponse(BaseModel):
     message: str = Field(..., description="响应消息")
     timestamp: datetime = Field(
         default_factory=datetime.now, description="响应时间戳")
+    data: Optional[Any] = Field(None, description="响应数据")
+
+    class Config:
+        populate_by_name = True
 
 
 class ErrorResponse(BaseModel):

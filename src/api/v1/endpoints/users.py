@@ -80,4 +80,12 @@ async def get_users(
 ):
     """获取用户列表（仅管理员）"""
     user_service = UserService(db)
+
+    # 获取当前用户角色（转换为字符串进行比较）
+    current_role_str = str(current_user.role)
+    is_admin = current_role_str == "UserRole.admin"
+
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="只有管理员可以获取用户列表")
+
     return await user_service.get_users(page, limit, search)

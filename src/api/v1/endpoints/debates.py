@@ -360,7 +360,7 @@ async def update_debate(
 
     # 如果更新了activity_id或status,清除Redis缓存
     if 'activity_id' in update_data or 'status' in update_data:
-        from backend.src.services.vote_service import VoteService
+        from src.services.vote_service import VoteService
         service = VoteService(db)
         service.invalidate_debate_cache(debate_id)
 
@@ -424,7 +424,7 @@ async def update_debate_status(
     db.commit()
 
     # 清除Redis缓存
-    from backend.src.services.vote_service import VoteService
+    from src.services.vote_service import VoteService
     service = VoteService(db)
     service.invalidate_debate_cache(debate_id)
 

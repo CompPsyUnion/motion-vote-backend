@@ -245,7 +245,7 @@ class ActivityService:
 
         # 如果更新了settings,清除Redis缓存
         if 'settings' in update_data:
-            from backend.src.services.vote_service import VoteService
+            from src.services.vote_service import VoteService
             vote_service = VoteService(self.db)
             vote_service.invalidate_activity_config_cache(activity_id)
 

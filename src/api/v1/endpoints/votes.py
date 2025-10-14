@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from src.api.dependencies import get_db
 from src.schemas.vote import ParticipantEnter, VoteRequest
-from backend.src.services.vote_service import VoteService
+from src.services.vote_service import VoteService
 
 router = APIRouter()
 

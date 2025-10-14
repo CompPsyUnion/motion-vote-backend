@@ -32,6 +32,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, description="用户姓名")
     phone: Optional[str] = Field(None, description="手机号")
     avatar: Optional[str] = Field(None, description="头像URL")
+    role: Optional[UserRole] = Field(None, description="用户角色（仅管理员可修改）")
 
 
 class UserResponse(UserBase):

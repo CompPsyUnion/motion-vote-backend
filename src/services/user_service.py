@@ -1,17 +1,18 @@
 from typing import Optional
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from src.core.exceptions import NotFoundError
 from src.models.user import User
 from src.schemas.base import PaginatedResponse
-from src.schemas.user import UserResponse, UserUpdate
+from src.schemas.user import UserResponse, UserRole, UserUpdate
 
 
 class UserService:
     def __init__(self, db: Session):
         self.db = db
 
-    async def update_user(self, user_id: str, user_update: UserUpdate) -> User:
+    async def update_user(self, user_id: str, user_update: UserUpdate, current_user_role: UserRole) -> User:
         """更新用户信息"""
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -19,6 +20,13 @@ class UserService:
 
         # 更新用户信息
         update_data = user_update.dict(exclude_unset=True)
+
+        # 如果更新数据中包含 role，检查权限
+        if 'role' in update_data:
+            # 只有管理员可以修改角色
+            if current_user_role != UserRole.admin:
+                raise HTTPException(status_code=403, detail="没有权限修改用户角色")
+
         for key, value in update_data.items():
             setattr(user, key, value)
 

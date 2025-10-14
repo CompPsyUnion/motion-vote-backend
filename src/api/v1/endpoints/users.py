@@ -47,7 +47,7 @@ async def update_profile(
 
     # 获取当前用户角色（转换为字符串进行比较）
     current_role_str = str(current_user.role)
-    is_admin = current_role_str == "admin"
+    is_admin = current_role_str == "UserRole.admin"
 
     # 如果指定了 id 参数
     if id is not None:

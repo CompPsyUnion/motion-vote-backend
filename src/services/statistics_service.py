@@ -6,6 +6,14 @@ from datetime import datetime, timezone
 from typing import List
 
 from fastapi import HTTPException
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer, Table,
+                                TableStyle)
 from sqlalchemy import and_, desc, func
 from sqlalchemy.orm import Session
 from src.models.activity import Activity, Collaborator
@@ -161,7 +169,9 @@ class StatisticsService:
 
     def _get_vote_results(self, debate_id: str) -> VoteResults:
         """获取投票结果"""
-        # 统计各立场的票数
+        from src.models.vote import VoteHistory
+
+        # 统计各立场的当前票数
         vote_counts = self.db.query(
             Vote.position,
             func.count(Vote.id).label('count')
@@ -181,12 +191,116 @@ class StatisticsService:
 
         total_votes = pro_votes + con_votes + abstain_votes
 
-        return VoteResults(
-            proVotes=pro_votes,
-            conVotes=con_votes,
-            abstainVotes=abstain_votes,
-            totalVotes=total_votes
-        )
+        # 计算初始票数：从VoteHistory中获取每个投票的第一个位置
+        votes_with_history = self.db.query(Vote).filter(
+            Vote.debate_id == debate_id).all()
+
+        pro_previous_votes = 0
+        con_previous_votes = 0
+        abstain_previous_votes = 0
+
+        # 统计从各方跑票到其他方的人数
+        # pro_to_con: 从正方跑到反方的人数
+        # pro_to_abstain: 从正方跑到弃权的人数
+        # con_to_pro: 从反方跑到正方的人数
+        # con_to_abstain: 从反方跑到弃权的人数
+        # abstain_to_pro: 从弃权跑到正方的人数
+        # abstain_to_con: 从弃权跑到反方的人数
+        pro_to_con = 0
+        pro_to_abstain = 0
+        con_to_pro = 0
+        con_to_abstain = 0
+        abstain_to_pro = 0
+        abstain_to_con = 0
+
+        for vote in votes_with_history:
+            # 获取该投票的最早历史记录
+            first_history = self.db.query(VoteHistory).filter(
+                VoteHistory.vote_id == vote.id
+            ).order_by(VoteHistory.created_at.asc()).first()
+
+            if first_history:
+                # 使用历史记录中的第一个位置
+                initial_position = getattr(first_history, 'new_position')
+            else:
+                # 没有历史记录，说明从未改过票，使用当前位置
+                initial_position = getattr(vote, 'position')
+
+            # 当前位置
+            current_position = getattr(vote, 'position')
+
+            # 统计初始票数
+            if initial_position == 'pro':
+                pro_previous_votes += 1
+            elif initial_position == 'con':
+                con_previous_votes += 1
+            elif initial_position == 'abstain':
+                abstain_previous_votes += 1
+
+            # 统计跑票情况（初始位置和当前位置不同）
+            if initial_position != current_position:
+                if initial_position == 'pro' and current_position == 'con':
+                    pro_to_con += 1
+                elif initial_position == 'pro' and current_position == 'abstain':
+                    pro_to_abstain += 1
+                elif initial_position == 'con' and current_position == 'pro':
+                    con_to_pro += 1
+                elif initial_position == 'con' and current_position == 'abstain':
+                    con_to_abstain += 1
+                elif initial_position == 'abstain' and current_position == 'pro':
+                    abstain_to_pro += 1
+                elif initial_position == 'abstain' and current_position == 'con':
+                    abstain_to_con += 1
+
+        # 计算弃权百分比
+        abstain_percentage = (abstain_votes / total_votes *
+                              100) if total_votes > 0 else 0
+
+        # 计算得分（根据新规则）
+        # 正方得分 = 反方到正方人数/反方初始人数 * 1000 + 中立到正方人数/中立初始人数 * 500
+        pro_score = 0.0
+        if con_previous_votes > 0:
+            pro_score += (con_to_pro / con_previous_votes * 1000)
+        if abstain_previous_votes > 0:
+            pro_score += (abstain_to_pro / abstain_previous_votes * 500)
+
+        # 反方得分 = 正方到反方人数/正方初始人数 * 1000 + 中立到反方人数/中立初始人数 * 500
+        con_score = 0.0
+        if pro_previous_votes > 0:
+            con_score += (pro_to_con / pro_previous_votes * 1000)
+        if abstain_previous_votes > 0:
+            con_score += (abstain_to_con / abstain_previous_votes * 500)
+
+        # 判定获胜方
+        winner = None
+        if total_votes > 0:
+            if pro_score > con_score:
+                winner = "pro"
+            elif con_score > pro_score:
+                winner = "con"
+            else:
+                winner = "tie"
+
+        return VoteResults.model_validate({
+            "debateId": debate_id,
+            "proVotes": pro_votes,
+            "conVotes": con_votes,
+            "abstainVotes": abstain_votes,
+            "totalVotes": total_votes,
+            "proPreviousVotes": pro_previous_votes,
+            "conPreviousVotes": con_previous_votes,
+            "abstainPreviousVotes": abstain_previous_votes,
+            "proToConVotes": pro_to_con,
+            "conToProVotes": con_to_pro,
+            "abstainToProVotes": abstain_to_pro,
+            "abstainToConVotes": abstain_to_con,
+            "abstainPercentage": round(abstain_percentage, 2),
+            "proScore": round(pro_score, 2),
+            "conScore": round(con_score, 2),
+            "winner": winner,
+            "isLocked": False,
+            "lockedAt": None
+        })
 
     def _get_recent_activity(self, activity_id: str, limit: int = 10) -> List[RecentActivity]:
         """获取最近活动"""
@@ -294,10 +408,15 @@ class StatisticsService:
             timeline = self._get_debate_timeline(str(debate.id))
 
             # 计算辩题持续时间
-            # TODO: 辩题模型中没有started_at和ended_at字段，使用预估时长
             duration = 0
-            if hasattr(debate, 'estimated_duration') and debate.estimated_duration is not None:
-                # If estimated_duration is a SQLAlchemy Column, get its value
+            started_at = getattr(debate, 'started_at', None)
+            ended_at = getattr(debate, 'ended_at', None)
+
+            if started_at and ended_at:
+                # 使用实际的开始和结束时间
+                duration = int((ended_at - started_at).total_seconds() / 60)
+            elif hasattr(debate, 'estimated_duration') and debate.estimated_duration is not None:
+                # 如果没有实际时间，使用预估时长
                 if hasattr(debate.estimated_duration, 'value'):
                     duration = debate.estimated_duration.value
                 else:
@@ -457,3 +576,199 @@ class StatisticsService:
         """导出所有数据为CSV"""
         # 简化实现：返回投票数据
         return self._export_votes_csv(activity_id)
+
+    def generate_pdf_report(self, activity_id: str, user_id: str) -> bytes:
+        """生成PDF格式的活动报告"""
+        # 获取报告数据
+        report = self.get_activity_report(activity_id, user_id)
+
+        # 创建PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        story = []
+        styles = getSampleStyleSheet()
+
+        # 标题
+        title = Paragraph(
+            f"<b>{report.activity_name}</b><br/>活动报告", styles['Title'])
+        story.append(title)
+        story.append(Spacer(1, 0.3*inch))
+
+        # 活动摘要
+        summary_data = [
+            ['指标', '数值'],
+            ['总参与人数', str(report.summary.total_participants)],
+            ['总投票数', str(report.summary.total_votes)],
+            ['辩题总数', str(report.summary.total_debates)],
+            ['平均投票率', f"{report.summary.average_vote_rate}%"],
+            ['活动时长(分钟)', str(report.summary.duration)],
+        ]
+
+        summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        story.append(summary_table)
+        story.append(Spacer(1, 0.3*inch))
+
+        # 辩题结果
+        story.append(Paragraph("<b>辩题投票结果</b>", styles['Heading2']))
+        story.append(Spacer(1, 0.2*inch))
+
+        for debate in report.debate_results:
+            # 从 results 字段中获取投票数据
+            pro_votes = debate.results.pro_votes
+            con_votes = debate.results.con_votes
+            abstain_votes = debate.results.abstain_votes
+            total_votes = pro_votes + con_votes + abstain_votes
+            pro_percentage = (pro_votes / total_votes *
+                              100) if total_votes > 0 else 0
+
+            debate_data = [
+                ['辩题', debate.debate_title],
+                ['赞成票', str(pro_votes)],
+                ['反对票', str(con_votes)],
+                ['弃权票', str(abstain_votes)],
+                ['总票数', str(total_votes)],
+                ['赞成率', f"{pro_percentage:.2f}%"],
+            ]
+
+            debate_table = Table(debate_data, colWidths=[2*inch, 3*inch])
+            debate_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+            ]))
+            story.append(debate_table)
+            story.append(Spacer(1, 0.2*inch))
+
+        # 生成时间
+        story.append(Spacer(1, 0.5*inch))
+        gen_time = f"生成时间: {report.generated_at.strftime('%Y-%m-%d %H:%M:%S')}"
+        story.append(Paragraph(gen_time, styles['Normal']))
+
+        # 构建PDF
+        doc.build(story)
+
+        pdf_content = buffer.getvalue()
+        buffer.close()
+
+        return pdf_content
+
+    def generate_excel_report(self, activity_id: str, user_id: str) -> bytes:
+        """生成Excel格式的活动报告"""
+        # 获取报告数据
+        report = self.get_activity_report(activity_id, user_id)
+
+        # 创建工作簿
+        wb = Workbook()
+
+        # 活动摘要工作表
+        ws_summary = wb.active
+        if ws_summary:
+            ws_summary.title = "活动摘要"
+
+            # 标题
+            ws_summary['A1'] = report.activity_name
+            ws_summary['A1'].font = Font(bold=True, size=16)
+            ws_summary.merge_cells('A1:B1')
+
+            # 摘要数据
+            summary_headers = ['指标', '数值']
+            ws_summary.append([])
+            ws_summary.append(summary_headers)
+
+            # 设置表头样式
+            for col in ['A', 'B']:
+                cell = ws_summary[f'{col}3']
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(
+                    start_color='CCCCCC', end_color='CCCCCC', fill_type='solid')
+                cell.alignment = Alignment(horizontal='center')
+
+            # 添加数据
+            ws_summary.append(['总参与人数', report.summary.total_participants])
+            ws_summary.append(['总投票数', report.summary.total_votes])
+            ws_summary.append(['辩题总数', report.summary.total_debates])
+            ws_summary.append(
+                ['平均投票率', f"{report.summary.average_vote_rate}%"])
+            ws_summary.append(['活动时长(分钟)', report.summary.duration])
+
+            # 设置列宽
+            ws_summary.column_dimensions['A'].width = 20
+            ws_summary.column_dimensions['B'].width = 15
+
+        # 辩题结果工作表
+        ws_debates = wb.create_sheet(title="辩题结果")
+
+        # 表头
+        debate_headers = ['辩题标题', '顺序', '赞成票',
+                          '反对票', '弃权票', '总票数', '赞成率', '投票率']
+        ws_debates.append(debate_headers)
+
+        # 设置表头样式
+        for col_idx, header in enumerate(debate_headers, start=1):
+            cell = ws_debates.cell(row=1, column=col_idx)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(
+                start_color='4472C4', end_color='4472C4', fill_type='solid')
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.alignment = Alignment(horizontal='center')
+
+        # 添加辩题数据
+        for debate in report.debate_results:
+            # 从 results 字段中获取投票数据
+            pro_votes = debate.results.pro_votes
+            con_votes = debate.results.con_votes
+            abstain_votes = debate.results.abstain_votes
+            total_votes = pro_votes + con_votes + abstain_votes
+            pro_percentage = (pro_votes / total_votes *
+                              100) if total_votes > 0 else 0
+            vote_rate = (total_votes / report.summary.total_participants *
+                         100) if report.summary.total_participants > 0 else 0
+
+            ws_debates.append([
+                debate.debate_title,
+                debate.debate_order,
+                pro_votes,
+                con_votes,
+                abstain_votes,
+                total_votes,
+                f"{pro_percentage:.2f}%",
+                f"{vote_rate:.2f}%"
+            ])
+
+        # 自动调整列宽
+        for column in ws_debates.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws_debates.column_dimensions[column_letter].width = adjusted_width
+
+        # 生成时间
+        if ws_summary:
+            ws_summary.append([])
+            ws_summary.append(
+                ['生成时间', report.generated_at.strftime('%Y-%m-%d %H:%M:%S')])
+
+        # 保存到字节流
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        excel_content = buffer.getvalue()
+        buffer.close()
+
+        return excel_content

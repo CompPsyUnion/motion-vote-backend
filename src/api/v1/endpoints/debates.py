@@ -59,6 +59,8 @@ def check_activity_permission(
 
 def get_debate_vote_stats(debate_id: str, db: Session) -> VoteStats:
     """获取辩题投票统计"""
+    from src.models.vote import Vote, VoteHistory
+
     # 分别统计各种投票数量 - 使用更简单的查询方法
     total_votes = db.query(func.count(Vote.id)).filter(
         Vote.debate_id == debate_id).scalar() or 0
@@ -75,20 +77,96 @@ def get_debate_vote_stats(debate_id: str, db: Session) -> VoteStats:
         Vote.position == VotePosition.abstain
     ).scalar() or 0
 
-    # 计算百分比
-    pro_percentage = (pro_votes / total_votes * 100) if total_votes > 0 else 0
-    con_percentage = (con_votes / total_votes * 100) if total_votes > 0 else 0
+    # 计算初始票数：从VoteHistory中获取每个投票的第一个位置
+    # 如果没有历史记录，则使用当前位置作为初始位置
+    votes_with_history = db.query(Vote).filter(
+        Vote.debate_id == debate_id).all()
+
+    pro_previous_votes = 0
+    con_previous_votes = 0
+    abstain_previous_votes = 0
+
+    # 统计从各方到其他方的人数
+    pro_to_con = 0
+    pro_to_abstain = 0
+    con_to_pro = 0
+    con_to_abstain = 0
+    abstain_to_pro = 0
+    abstain_to_con = 0
+
+    for vote in votes_with_history:
+        # 获取该投票的最早历史记录
+        first_history = db.query(VoteHistory).filter(
+            VoteHistory.vote_id == vote.id
+        ).order_by(VoteHistory.created_at.asc()).first()
+
+        if first_history:
+            # 使用历史记录中的第一个位置
+            initial_position = getattr(first_history, 'new_position')
+        else:
+            # 没有历史记录，说明从未改过票，使用当前位置
+            initial_position = getattr(vote, 'position')
+
+        # 当前位置
+        current_position = getattr(vote, 'position')
+
+        # 统计初始票数
+        if initial_position == VotePosition.pro:
+            pro_previous_votes += 1
+        elif initial_position == VotePosition.con:
+            con_previous_votes += 1
+        elif initial_position == VotePosition.abstain:
+            abstain_previous_votes += 1
+
+        # 统计转换情况（初始位置和当前位置不同）
+        if initial_position != current_position:
+            if initial_position == VotePosition.pro and current_position == VotePosition.con:
+                pro_to_con += 1
+            elif initial_position == VotePosition.pro and current_position == VotePosition.abstain:
+                pro_to_abstain += 1
+            elif initial_position == VotePosition.con and current_position == VotePosition.pro:
+                con_to_pro += 1
+            elif initial_position == VotePosition.con and current_position == VotePosition.abstain:
+                con_to_abstain += 1
+            elif initial_position == VotePosition.abstain and current_position == VotePosition.pro:
+                abstain_to_pro += 1
+            elif initial_position == VotePosition.abstain and current_position == VotePosition.con:
+                abstain_to_con += 1
+
+    # 计算弃权百分比
     abstain_percentage = (abstain_votes / total_votes *
                           100) if total_votes > 0 else 0
+
+    # 计算得分（根据新规则）
+    # 正方得分 = 反方到正方人数/反方初始人数 * 1000 + 中立到正方人数/中立初始人数 * 500
+    pro_score = 0.0
+    if con_previous_votes > 0:
+        pro_score += (con_to_pro / con_previous_votes * 1000)
+    if abstain_previous_votes > 0:
+        pro_score += (abstain_to_pro / abstain_previous_votes * 500)
+
+    # 反方得分 = 正方到反方人数/正方初始人数 * 1000 + 中立到反方人数/中立初始人数 * 500
+    con_score = 0.0
+    if pro_previous_votes > 0:
+        con_score += (pro_to_con / pro_previous_votes * 1000)
+    if abstain_previous_votes > 0:
+        con_score += (abstain_to_con / abstain_previous_votes * 500)
 
     return VoteStats(
         total_votes=total_votes,
         pro_votes=pro_votes,
         con_votes=con_votes,
         abstain_votes=abstain_votes,
-        pro_percentage=round(pro_percentage, 2),
-        con_percentage=round(con_percentage, 2),
-        abstain_percentage=round(abstain_percentage, 2)
+        abstain_percentage=round(abstain_percentage, 2),
+        pro_previous_votes=pro_previous_votes,
+        con_previous_votes=con_previous_votes,
+        abstain_previous_votes=abstain_previous_votes,
+        pro_to_con_votes=pro_to_con,
+        con_to_pro_votes=con_to_pro,
+        abstain_to_pro_votes=abstain_to_pro,
+        abstain_to_con_votes=abstain_to_con,
+        pro_score=round(pro_score, 2),
+        con_score=round(con_score, 2)
     )
 
 
@@ -282,8 +360,8 @@ async def update_debate(
 
     # 如果更新了activity_id或status,清除Redis缓存
     if 'activity_id' in update_data or 'status' in update_data:
-        from src.services.hybrid_vote_service import HybridVoteService
-        service = HybridVoteService(db)
+        from backend.src.services.vote_service import VoteService
+        service = VoteService(db)
         service.invalidate_debate_cache(debate_id)
 
     return {
@@ -346,8 +424,8 @@ async def update_debate_status(
     db.commit()
 
     # 清除Redis缓存
-    from src.services.hybrid_vote_service import HybridVoteService
-    service = HybridVoteService(db)
+    from backend.src.services.vote_service import VoteService
+    service = VoteService(db)
     service.invalidate_debate_cache(debate_id)
 
     return {"message": "Debate status updated successfully"}
@@ -432,6 +510,8 @@ async def set_current_debate(
     current_user: User = Depends(get_current_user)
 ):
     """切换当前辩题"""
+    from datetime import datetime
+
     # 检查权限
     activity = check_activity_permission(
         activity_id, str(current_user.id), "control", db)
@@ -445,6 +525,23 @@ async def set_current_debate(
     if not debate:
         raise HTTPException(
             status_code=404, detail="Debate not found in this activity")
+
+    # 获取之前的当前辩题
+    old_debate_id = getattr(activity, 'current_debate_id', None)
+
+    # 如果有之前的辩题，标记为结束
+    if old_debate_id and old_debate_id != current_debate_data.debate_id:
+        old_debate = db.query(Debate).filter(
+            Debate.id == old_debate_id).first()
+        if old_debate:
+            old_ended_at = getattr(old_debate, 'ended_at', None)
+            if not old_ended_at:
+                setattr(old_debate, 'ended_at', datetime.now())
+
+    # 标记新辩题开始
+    debate_started_at = getattr(debate, 'started_at', None)
+    if not debate_started_at:
+        setattr(debate, 'started_at', datetime.now())
 
     # 更新当前辩题
     db.query(Activity).filter(Activity.id == activity_id).update({

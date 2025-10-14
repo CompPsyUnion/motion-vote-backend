@@ -31,9 +31,9 @@ def init_database():
         # 导入所有模型以确保它们被注册到Base.metadata
         import src.models.activity
         import src.models.debate
+        import src.models.site_info
         import src.models.user
         import src.models.vote
-        import src.models.site_info
 
         # 获取所有应该存在的表
         expected_tables = list(Base.metadata.tables.keys())

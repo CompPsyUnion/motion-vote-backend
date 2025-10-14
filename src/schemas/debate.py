@@ -74,11 +74,26 @@ class DebateResponse(DebateBase):
 
 class VoteStats(BaseModel):
     total_votes: int = Field(default=0, description="总投票数")
-    pro_votes: int = Field(default=0, description="正方票数")
-    con_votes: int = Field(default=0, description="反方票数")
-    abstain_votes: int = Field(default=0, description="弃权票数")
-    pro_percentage: float = Field(default=0.0, description="正方得票率")
-    con_percentage: float = Field(default=0.0, description="反方得票率")
+
+    # 正方相关
+    pro_votes: int = Field(default=0, description="正方最终票数")
+    pro_previous_votes: int = Field(default=0, description="正方初始票数")
+    pro_to_con_votes: int = Field(default=0, description="正方到反方票数")
+
+    # 反方相关
+    con_votes: int = Field(default=0, description="反方最终票数")
+    con_previous_votes: int = Field(default=0, description="反方初始票数")
+    con_to_pro_votes: int = Field(default=0, description="反方到正方票数")
+
+    # 中立相关
+    abstain_votes: int = Field(default=0, description="中立最终票数")
+    abstain_previous_votes: int = Field(default=0, description="中立初始票数")
+    abstain_to_pro_votes: int = Field(default=0, description="中立到正方票数")
+    abstain_to_con_votes: int = Field(default=0, description="中立到反方票数")
+
+    # 得分和百分比
+    pro_score: float = Field(default=0.0, description="正方分数")
+    con_score: float = Field(default=0.0, description="反方分数")
     abstain_percentage: float = Field(default=0.0, description="弃权率")
 
 

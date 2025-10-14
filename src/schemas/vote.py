@@ -90,18 +90,32 @@ class VoteResults(BaseModel):
     debate_id: str = Field(..., alias="debateId", description="辩题ID")
     total_votes: int = Field(default=0, alias="totalVotes", description="总投票数")
     pro_votes: int = Field(default=0, alias="proVotes", description="正方票数")
+    pro_previous_votes: int = Field(
+        default=0, alias="proPreviousVotes", description="正方初始票数")
+    pro_swing_votes: int = Field(
+        default=0, alias="proSwingVotes", description="正方跑票数")
     con_votes: int = Field(default=0, alias="conVotes", description="反方票数")
+    con_previous_votes: int = Field(
+        default=0, alias="conPreviousVotes", description="反方初始票数")
+    con_swing_votes: int = Field(
+        default=0, alias="conSwingVotes", description="反方跑票数")
     abstain_votes: int = Field(
         default=0, alias="abstainVotes", description="弃权票数")
+    abstain_previous_votes: int = Field(
+        default=0, alias="abstainPreviousVotes", description="弃权初始票数")
+    abstain_swing_votes: int = Field(
+        default=0, alias="abstainSwingVotes", description="中立跑票数")
     pro_percentage: float = Field(
         default=0.0, alias="proPercentage", description="正方得票率")
     con_percentage: float = Field(
         default=0.0, alias="conPercentage", description="反方得票率")
     abstain_percentage: float = Field(
         default=0.0, alias="abstainPercentage", description="弃权率")
+    winner: Optional[str] = Field(None, description="获胜方")
+    is_locked: bool = Field(
+        default=False, alias="isLocked", description="结果是否已锁定")
+    locked_at: Optional[datetime] = Field(
+        None, alias="lockedAt", description="锁定时间")
 
     class Config:
         populate_by_name = True
-    winner: Optional[str] = Field(None, description="获胜方")
-    is_locked: bool = Field(default=False, description="结果是否已锁定")
-    locked_at: Optional[datetime] = Field(None, description="锁定时间")

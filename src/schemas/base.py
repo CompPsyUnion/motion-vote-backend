@@ -22,10 +22,10 @@ class PaginatedResponse(BaseModel):
 
 class ApiResponse(BaseModel):
     success: bool = Field(default=True, description="请求是否成功")
-    message: str = Field(..., description="响应消息")
+    message: str = Field(default="操作成功", description="响应消息")
     timestamp: datetime = Field(
         default_factory=datetime.now, description="响应时间戳")
-    data: Optional[Any] = Field(None, description="响应数据")
+    data: Optional[Any] = Field(default=None, description="响应数据")
 
     class Config:
         populate_by_name = True

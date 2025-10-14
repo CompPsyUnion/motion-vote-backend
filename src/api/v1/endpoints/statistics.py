@@ -1,6 +1,8 @@
 """统计数据相关的 API 端点"""
 
+import io
 from fastapi import APIRouter, Depends, Query, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from src.api.dependencies import get_current_user, get_db
 from src.models.user import User
@@ -58,8 +60,31 @@ async def get_activity_report(
             "message": "获取成功",
             "data": report_data.model_dump(by_alias=True)
         }
+    elif format == "pdf":
+        # 生成PDF报告
+        user_id_str: str = getattr(current_user, 'id')
+        pdf_content = service.generate_pdf_report(activity_id, user_id_str)
+
+        return StreamingResponse(
+            io.BytesIO(pdf_content),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=activity_report_{activity_id}.pdf"
+            }
+        )
+    elif format == "excel":
+        # 生成Excel报告
+        user_id_str: str = getattr(current_user, 'id')
+        excel_content = service.generate_excel_report(activity_id, user_id_str)
+
+        return StreamingResponse(
+            io.BytesIO(excel_content),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename=activity_report_{activity_id}.xlsx"
+            }
+        )
     else:
-        # TODO: 实现PDF和Excel格式导出
         return {
             "success": False,
             "message": f"暂不支持{format}格式导出",

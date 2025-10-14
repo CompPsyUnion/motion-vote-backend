@@ -42,10 +42,47 @@ class RealTimeStats(BaseModel):
 
 class VoteResults(BaseModel):
     """投票结果"""
-    pro_votes: int = Field(..., alias="proVotes", description="正方票数")
-    con_votes: int = Field(..., alias="conVotes", description="反方票数")
-    abstain_votes: int = Field(..., alias="abstainVotes", description="弃权票数")
-    total_votes: int = Field(..., alias="totalVotes", description="总票数")
+    debate_id: str = Field(..., alias="debateId", description="辩题ID")
+    total_votes: int = Field(default=0, alias="totalVotes", description="总投票数")
+
+    # 正方相关
+    pro_votes: int = Field(default=0, alias="proVotes", description="正方最终票数")
+    pro_previous_votes: int = Field(
+        default=0, alias="proPreviousVotes", description="正方初始票数")
+    pro_to_con_votes: int = Field(
+        default=0, alias="proToConVotes", description="正方到反方票数")
+
+    # 反方相关
+    con_votes: int = Field(default=0, alias="conVotes", description="反方最终票数")
+    con_previous_votes: int = Field(
+        default=0, alias="conPreviousVotes", description="反方初始票数")
+    con_to_pro_votes: int = Field(
+        default=0, alias="conToProVotes", description="反方到正方票数")
+
+    # 中立相关
+    abstain_votes: int = Field(
+        default=0, alias="abstainVotes", description="中立最终票数")
+    abstain_previous_votes: int = Field(
+        default=0, alias="abstainPreviousVotes", description="中立初始票数")
+    abstain_to_pro_votes: int = Field(
+        default=0, alias="abstainToProVotes", description="中立到正方票数")
+    abstain_to_con_votes: int = Field(
+        default=0, alias="abstainToConVotes", description="中立到反方票数")
+
+    # 得分和百分比
+    pro_score: float = Field(
+        default=0.0, alias="proScore", description="正方分数 = 反方到正方人数/反方初始人数 * 1000 + 中立到正方人数/中立初始人数 * 500")
+    con_score: float = Field(
+        default=0.0, alias="conScore", description="反方分数 = 正方到反方人数/正方初始人数 * 1000 + 中立到反方人数/中立初始人数 * 500")
+    abstain_percentage: float = Field(
+        default=0.0, alias="abstainPercentage", description="弃权率")
+
+    # 胜负判定
+    winner: Optional[str] = Field(None, description="获胜方")
+    is_locked: bool = Field(
+        default=False, alias="isLocked", description="结果是否已锁定")
+    locked_at: Optional[datetime] = Field(
+        None, alias="lockedAt", description="锁定时间")
 
     class Config:
         populate_by_name = True

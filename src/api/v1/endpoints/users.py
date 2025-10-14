@@ -50,7 +50,7 @@ async def update_profile(
     is_admin = current_role_str == "UserRole.admin"
 
     # 如果指定了 id 参数
-    if id is not None:
+    if id:
         # 检查当前用户是否为管理员
         if not is_admin:
             raise HTTPException(status_code=403, detail="只有管理员可以更新其他用户信息")
@@ -61,7 +61,7 @@ async def update_profile(
     else:
         # 普通用户更新自己的信息
         # 如果普通用户尝试修改 role，返回权限错误
-        if user_update.role is not None and not is_admin:
+        if user_update.role and not is_admin and user_update.role != current_user.role:
             raise HTTPException(status_code=403, detail="没有权限修改用户角色")
 
         # 转换角色

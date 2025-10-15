@@ -25,6 +25,7 @@ from src.schemas.activity import (ActivityCreate, ActivityDetail,
                                   CollaboratorInvite, CollaboratorPermission,
                                   CollaboratorResponse, CollaboratorStatus,
                                   CollaboratorUpdate, PaginatedActivities)
+from src.schemas.debate import DebateResponse
 
 
 class ActivityService:
@@ -210,15 +211,56 @@ class ActivityService:
         statistics = self._get_activity_statistics(activity_id)
 
         # 构建响应
+        # Prepare debates using DebateResponse to ensure all required fields and aliases are present
+        debates_list = []
+        for d in activity.debates:
+            try:
+                debate_obj = DebateResponse.model_validate(d)
+                debates_list.append(debate_obj.model_dump())
+            except Exception:
+                # Fallback: build a minimal dict with commonly available attributes
+                debates_list.append({
+                    "id": getattr(d, 'id', None),
+                    "title": getattr(d, 'title', None),
+                    "proDescription": getattr(d, 'pro_description', None) if hasattr(d, 'pro_description') else getattr(d, 'proDescription', None),
+                    "conDescription": getattr(d, 'con_description', None) if hasattr(d, 'con_description') else getattr(d, 'conDescription', None),
+                    "activityId": getattr(d, 'activity_id', None) if hasattr(d, 'activity_id') else getattr(d, 'activityId', None),
+                    "status": getattr(d, 'status', None),
+                    "order": getattr(d, 'order', None),
+                    "createdAt": getattr(d, 'created_at', None) if hasattr(d, 'created_at') else getattr(d, 'createdAt', None),
+                    "updatedAt": getattr(d, 'updated_at', None) if hasattr(d, 'updated_at') else getattr(d, 'updatedAt', None)
+                })
+
+        # Prepare current debate similarly
+        current_debate_obj = None
+        if activity.current_debate:
+            try:
+                current_debate_obj = DebateResponse.model_validate(
+                    activity.current_debate).model_dump()
+            except Exception:
+                cd = activity.current_debate
+                current_debate_obj = {
+                    "id": getattr(cd, 'id', None),
+                    "title": getattr(cd, 'title', None),
+                    "proDescription": getattr(cd, 'pro_description', None) if hasattr(cd, 'pro_description') else getattr(cd, 'proDescription', None),
+                    "conDescription": getattr(cd, 'con_description', None) if hasattr(cd, 'con_description') else getattr(cd, 'conDescription', None),
+                    "activityId": getattr(cd, 'activity_id', None) if hasattr(cd, 'activity_id') else getattr(cd, 'activityId', None),
+                    "status": getattr(cd, 'status', None),
+                    "order": getattr(cd, 'order', None),
+                    "createdAt": getattr(cd, 'created_at', None) if hasattr(cd, 'created_at') else getattr(cd, 'createdAt', None),
+                    "updatedAt": getattr(cd, 'updated_at', None) if hasattr(cd, 'updated_at') else getattr(cd, 'updatedAt', None)
+                }
+
         activity_dict = {
             **ActivityResponse.model_validate(activity).model_dump(),
             "collaborators": [self._build_collaborator_response(c) for c in activity.collaborators],
-            "debates": [{"id": d.id, "title": d.title, "status": d.status} for d in activity.debates],
-            "currentDebate": {"id": activity.current_debate.id, "title": activity.current_debate.title} if activity.current_debate else None,
+            "debates": debates_list,
+            "currentDebate": current_debate_obj,
             "statistics": statistics
         }
 
-        return ActivityDetail(**activity_dict)
+        # Validate and return ActivityDetail
+        return ActivityDetail.model_validate(activity_dict)
 
     def update_activity(self, activity_id: str, activity_data: ActivityUpdate, user_id: str) -> ActivityResponse:
         """更新活动"""

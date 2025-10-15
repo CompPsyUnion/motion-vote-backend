@@ -56,17 +56,17 @@ async def update_profile(
             raise HTTPException(status_code=403, detail="只有管理员可以更新其他用户信息")
 
         # 管理员更新指定用户
-        await user_service.update_user(id, user_update, current_user_role=UserRole.admin)
+        await user_service.update_user(id, user_update)
         return ApiResponse(message="用户信息更新成功")
     else:
         # 普通用户更新自己的信息
         # 如果普通用户尝试修改 role，返回权限错误
-        if user_update.role and not is_admin and user_update.role != current_user.role:
+        if user_update.role and not is_admin and str(user_update.role) != str(current_user.role):
             raise HTTPException(status_code=403, detail="没有权限修改用户角色")
 
         # 转换角色
         user_role = UserRole.admin if is_admin else UserRole.organizer
-        await user_service.update_user(str(current_user.id), user_update, current_user_role=user_role)
+        await user_service.update_user(str(current_user.id), user_update)
         return ApiResponse(message="用户信息更新成功")
 
 

@@ -12,7 +12,7 @@ class UserService:
     def __init__(self, db: Session):
         self.db = db
 
-    async def update_user(self, user_id: str, user_update: UserUpdate, current_user_role: UserRole) -> User:
+    async def update_user(self, user_id: str, user_update: UserUpdate) -> User:
         """更新用户信息"""
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -21,11 +21,9 @@ class UserService:
         # 更新用户信息
         update_data = user_update.dict(exclude_unset=True)
 
-        # 如果更新数据中包含 role，检查权限
-        if 'role' in update_data:
-            # 只有管理员可以修改角色
-            if current_user_role != UserRole.admin:
-                raise HTTPException(status_code=403, detail="没有权限修改用户角色")
+        # 如空则不变
+        if 'role' in update_data and not update_data['role']:
+            update_data.pop('role')
 
         for key, value in update_data.items():
             setattr(user, key, value)

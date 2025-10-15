@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class UserRole(str, Enum):
     admin = "admin"
     organizer = "organizer"
+    empty = ""
 
 
 class UserBase(BaseModel):

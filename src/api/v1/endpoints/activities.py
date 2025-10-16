@@ -43,8 +43,7 @@ async def get_activities(
         default="created_at", description="排序字段 (created_at|name|start_time)"),
     sort_order: Optional[str] = Query(
         default="desc", description="排序方向 (asc|desc)"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """获取用户创建和参与的活动列表
 
@@ -72,7 +71,7 @@ async def get_activities(
         enhanced_search = ' '.join(search_parts)
 
     return service.get_activities_paginated(
-        user_id=str(current_user.id),
+        user_id=None,
         page=page,
         limit=limit,
         status=status,
@@ -95,12 +94,11 @@ async def create_activity(
 @router.get("/{activity_id}", response_model=ActivityDetail)
 async def get_activity_detail(
     activity_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """获取指定活动的详细信息"""
     service = ActivityService(db)
-    return service.get_activity_detail(activity_id, str(current_user.id))
+    return service.get_activity_detail(activity_id, None)
 
 
 @router.put("/{activity_id}", response_model=ApiResponse)

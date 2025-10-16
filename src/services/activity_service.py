@@ -36,7 +36,7 @@ class ActivityService:
 
     def get_activities_paginated(
         self,
-        user_id: str,
+        user_id: Optional[str] = None,
         page: int = 1,
         limit: int = 20,
         status: Optional[str] = None,
@@ -58,50 +58,52 @@ class ActivityService:
 
         query = self.db.query(Activity)
 
-        # 筛选用户相关的活动
-        if role and role.lower() == "owner":
-            query = query.filter(Activity.owner_id == user_id)
-        elif role and role.lower() == "collaborator":
-            # 获取用户作为协作者的活动ID
-            collaborator_activity_ids = self.db.query(Collaborator.activity_id).filter(
-                Collaborator.user_id == user_id,
-                Collaborator.status == CollaboratorStatus.accepted
-            ).all()
-            activity_ids = [str(c.activity_id)
-                            for c in collaborator_activity_ids]
-            if activity_ids:
-                query = query.filter(Activity.id.in_(activity_ids))
-            else:
-                # 如果没有协作的活动，返回空结果
-                query = query.filter(Activity.id.is_(None))
-        else:
-            # 默认获取用户创建或协作者的活动 - 使用更简单的方法
-            owned_activities = query.filter(Activity.owner_id == user_id)
-
-            # 获取协作的活动ID
-            collaborator_activity_ids = self.db.query(Collaborator.activity_id).filter(
-                Collaborator.user_id == user_id,
-                Collaborator.status == CollaboratorStatus.accepted
-            ).all()
-
-            if collaborator_activity_ids:
+        # 筛选用户相关的活动（仅当提供了 user_id 时）
+        if user_id:
+            if role and role.lower() == "owner":
+                query = query.filter(Activity.owner_id == user_id)
+            elif role and role.lower() == "collaborator":
+                # 获取用户作为协作者的活动ID
+                collaborator_activity_ids = self.db.query(Collaborator.activity_id).filter(
+                    Collaborator.user_id == user_id,
+                    Collaborator.status == CollaboratorStatus.accepted
+                ).all()
                 activity_ids = [str(c.activity_id)
                                 for c in collaborator_activity_ids]
-                collaborated_activities = self.db.query(
-                    Activity).filter(Activity.id.in_(activity_ids))
-
-                # 合并两个查询结果 - 使用Python集合去重
-                owned_ids = {str(a.id) for a in owned_activities.all()}
-                collab_ids = {str(a.id) for a in collaborated_activities.all()}
-                all_activity_ids = list(owned_ids | collab_ids)
-
-                if all_activity_ids:
-                    query = query.filter(Activity.id.in_(all_activity_ids))
+                if activity_ids:
+                    query = query.filter(Activity.id.in_(activity_ids))
                 else:
+                    # 如果没有协作的活动，返回空结果
                     query = query.filter(Activity.id.is_(None))
             else:
-                # 只有拥有的活动
-                query = query.filter(Activity.owner_id == user_id)
+                # 默认获取用户创建或协作者的活动 - 使用更简单的方法
+                owned_activities = query.filter(Activity.owner_id == user_id)
+
+                # 获取协作的活动ID
+                collaborator_activity_ids = self.db.query(Collaborator.activity_id).filter(
+                    Collaborator.user_id == user_id,
+                    Collaborator.status == CollaboratorStatus.accepted
+                ).all()
+
+                if collaborator_activity_ids:
+                    activity_ids = [str(c.activity_id)
+                                    for c in collaborator_activity_ids]
+                    collaborated_activities = self.db.query(
+                        Activity).filter(Activity.id.in_(activity_ids))
+
+                    # 合并两个查询结果 - 使用Python集合去重
+                    owned_ids = {str(a.id) for a in owned_activities.all()}
+                    collab_ids = {str(a.id) for a in collaborated_activities.all()}
+                    all_activity_ids = list(owned_ids | collab_ids)
+
+                    if all_activity_ids:
+                        query = query.filter(Activity.id.in_(all_activity_ids))
+                    else:
+                        query = query.filter(Activity.id.is_(None))
+                else:
+                    # 只有拥有的活动
+                    query = query.filter(Activity.owner_id == user_id)
+        # 如果没有 user_id，返回所有活动（不做用户筛选）
 
         # 状态筛选
         if status_enum:
@@ -183,7 +185,7 @@ class ActivityService:
 
         return ActivityResponse.model_validate(activity)
 
-    def get_activity_detail(self, activity_id: str, user_id: str) -> ActivityDetail:
+    def get_activity_detail(self, activity_id: str, user_id: Optional[str] = None) -> ActivityDetail:
         """获取活动详情，包含协作者、辩题等信息"""
         # 使用 selectinload 预加载相关数据
         activity = self.db.query(Activity)\
@@ -200,8 +202,8 @@ class ActivityService:
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-        # 检查权限
-        if str(activity.owner_id) != user_id:
+        # 检查权限（仅当提供了 user_id 时）
+        if user_id and str(activity.owner_id) != user_id:
             collaborator = self._get_user_collaboration(activity_id, user_id)
             if not collaborator:
                 raise HTTPException(

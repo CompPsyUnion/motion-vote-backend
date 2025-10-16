@@ -51,13 +51,6 @@ class UserLogin(BaseModel):
     password: str = Field(..., description="密码")
 
 
-class TokenResponse(BaseModel):
-    access_token: str = Field(..., description="访问令牌")
-    refresh_token: str = Field(..., description="刷新令牌")
-    token_type: str = Field(default="bearer", description="令牌类型")
-    expires_in: int = Field(..., description="令牌有效期（秒）")
-
-
 class RegisterResponse(BaseModel):
     user: UserResponse = Field(..., description="用户信息")
     access_token: str = Field(..., description="访问令牌")
@@ -66,5 +59,26 @@ class RegisterResponse(BaseModel):
     expires_in: int = Field(..., description="令牌有效期（秒）")
 
 
-class PasswordReset(BaseModel):
-    email: str = Field(..., description="邮箱地址")
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., description="Email address")
+    code: str = Field(..., description="Verification code")
+    session: str = Field(..., description="Verification session")
+    newPassword: str = Field(..., min_length=6,
+                             description="New password", alias="newPassword")
+
+    class Config:
+        populate_by_name = True
+
+
+class LoginResponse(BaseModel):
+    token: str = Field(..., description="Access token")
+    user: UserResponse = Field(..., description="User information")
+
+
+class RefreshTokenResponse(BaseModel):
+    success: bool = Field(default=True, description="Success status")
+    message: str = Field(
+        default="Token refreshed successfully", description="Message")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(), description="Timestamp")
+    data: dict = Field(..., description="Token data")

@@ -5,9 +5,8 @@ from src.core.auth import (create_access_token, create_refresh_token,
 from src.core.exceptions import AuthenticationError, ValidationError
 from src.core.redis import get_redis
 from src.models.user import User
-from src.schemas.user import (ForgotPasswordRequest, LoginResponse,
-                              RegisterRequest, RegisterResponse, UserLogin,
-                              UserResponse, UserRole)
+from src.schemas.user import (ForgotPasswordRequest, RegisterRequest,
+                              LoginRequest, UserResponse, UserRole)
 from src.services.redis_verification_service import \
     RedisVerificationCodeService
 
@@ -18,7 +17,7 @@ class AuthService:
         self.verification_service = RedisVerificationCodeService()
         self.redis = get_redis()
 
-    async def register(self, user_data: RegisterRequest) -> RegisterResponse:
+    async def register(self, user_data: RegisterRequest) -> dict:
         """用户注册"""
         # 验证邮箱验证码
         self.verification_service.verify_code(
@@ -53,20 +52,10 @@ class AuthService:
         self.db.commit()
         self.db.refresh(db_user)
 
-        # 生成令牌
-        access_token = create_access_token(data={"sub": str(db_user.id)})
-        refresh_token = create_refresh_token(data={"sub": str(db_user.id)})
+        # 返回空字典，endpoint会包裹在ApiResponse中
+        return {}
 
-        # 返回注册响应
-        user_response = UserResponse.model_validate(db_user)
-        return RegisterResponse(
-            user=user_response,
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_in=settings.access_token_expire_minutes * 60
-        )
-
-    async def login(self, user_data: UserLogin) -> LoginResponse:
+    async def login(self, user_data: LoginRequest) -> dict:
         """User login"""
         # Verify user credentials
         user = self.db.query(User).filter(
@@ -80,9 +69,12 @@ class AuthService:
         # Generate token
         access_token = create_access_token(data={"sub": str(user.id)})
 
-        # Return login response
+        # Return login response as dict
         user_response = UserResponse.model_validate(user)
-        return LoginResponse(token=access_token, user=user_response)
+        return {
+            "token": access_token,
+            "user": user_response.model_dump()
+        }
 
     async def get_current_user(self, token: str) -> UserResponse:
         """Get current user from token"""

@@ -8,9 +8,8 @@ from src.core.database import get_db
 from src.schemas.base import ApiResponse
 from src.schemas.email_verification import (EmailVerificationResponse,
                                             VerificationCodeData)
-from src.schemas.user import (ForgotPasswordRequest, LoginResponse,
-                              RefreshTokenResponse, RegisterRequest,
-                              RegisterResponse, UserLogin)
+from src.schemas.user import (
+    ForgotPasswordRequest, RegisterRequest, LoginRequest)
 from src.services.auth_service import AuthService
 from src.services.redis_verification_service import \
     RedisVerificationCodeService
@@ -28,30 +27,42 @@ async def send_verification_code(email: str = Query(..., description="Email addr
         success=True,
         message=str(result["message"]),
         timestamp=datetime.now(timezone.utc),
-        data=VerificationCodeData(session=str(result["session"])),
+        data=VerificationCodeData(session=str(result["session"]))
     )
 
 
-@router.post("/register", response_model=RegisterResponse, status_code=HTTPStatus.CREATED)
+@router.post("/register", response_model=ApiResponse, status_code=HTTPStatus.CREATED)
 async def register(user_data: RegisterRequest, db: Session = Depends(get_db)):
     """User registration"""
     auth_service = AuthService(db)
-    return await auth_service.register(user_data)
+    result = await auth_service.register(user_data)
+    return ApiResponse(
+        success=True,
+        message="注册成功",
+        timestamp=datetime.now(timezone.utc),
+        data=result
+    )
 
 
-@router.post("/login", response_model=LoginResponse)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
+@router.post("/login", response_model=ApiResponse)
+async def login(user_data: LoginRequest, db: Session = Depends(get_db)):
     """User login"""
     auth_service = AuthService(db)
-    return await auth_service.login(user_data)
+    result = await auth_service.login(user_data)
+    return ApiResponse(
+        success=True,
+        message="登录成功",
+        timestamp=datetime.now(timezone.utc),
+        data=result
+    )
 
 
-@router.post("/refresh", response_model=RefreshTokenResponse)
+@router.post("/refresh", response_model=ApiResponse)
 async def refresh_token(token=Depends(security), db: Session = Depends(get_db)):
     """Refresh JWT Token"""
     auth_service = AuthService(db)
     new_token = await auth_service.refresh_token(token.credentials)
-    return RefreshTokenResponse(
+    return ApiResponse(
         success=True,
         message="Token refreshed successfully",
         timestamp=datetime.now(timezone.utc),

@@ -1,12 +1,12 @@
 from sqlalchemy.orm import Session
-from src.core.auth import (create_access_token, get_password_hash, verify_password, verify_token)
+from src.core.auth import (create_access_token, get_password_hash,
+                           verify_password, verify_token)
 from src.core.exceptions import AuthenticationError, ValidationError
 from src.core.redis import get_redis
 from src.models.user import User
 from src.schemas.user import (ForgotPasswordRequest, LoginRequest,
                               RegisterRequest, UserResponse, UserRole)
-
-from backend.src.services.verification_service import VerificationCodeService
+from src.services.verification_service import VerificationCodeService
 
 
 class AuthService:

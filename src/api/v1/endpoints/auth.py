@@ -11,8 +11,7 @@ from src.schemas.email_verification import (EmailVerificationResponse,
 from src.schemas.user import (ForgotPasswordRequest, LoginRequest,
                               RegisterRequest)
 from src.services.auth_service import AuthService
-
-from backend.src.services.verification_service import VerificationCodeService
+from src.services.verification_service import VerificationCodeService
 
 router = APIRouter()
 security = HTTPBearer()

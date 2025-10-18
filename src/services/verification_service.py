@@ -10,7 +10,7 @@ from src.core.redis import get_redis
 from src.services.email_service import EmailService
 
 
-class RedisVerificationCodeService:
+class VerificationCodeService:
     """基于Redis的邮箱验证码服务"""
 
     def __init__(self):

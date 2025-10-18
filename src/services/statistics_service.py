@@ -1,9 +1,11 @@
-"""统计数据服务"""
+"""统计数据服务 - 基于Redis的实时统计 + 报表导出"""
 
+import asyncio
 import csv
 import io
+import json
 from datetime import datetime, timezone
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 from openpyxl import Workbook
@@ -16,6 +18,9 @@ from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer, Table,
                                 TableStyle)
 from sqlalchemy import and_, desc, func
 from sqlalchemy.orm import Session
+
+from src.core.redis import get_redis
+from src.core.socketio_manager import broadcast_statistics_update
 from src.models.activity import Activity, Collaborator
 from src.models.debate import Debate
 from src.models.vote import Participant, Vote
@@ -27,8 +32,37 @@ from src.schemas.statistics import (ActivityReport, ActivitySummary,
 
 
 class StatisticsService:
+    """统计服务 - 集成Redis缓存和报表功能"""
+
+    # 后台同步任务
+    _sync_task: Optional[asyncio.Task] = None
+    _last_broadcast: Dict[str, float] = {}  # activity_id -> timestamp
+
     def __init__(self, db: Session):
         self.db = db
+        self.redis = get_redis()
+
+        # 启动后台同步和广播任务
+        if StatisticsService._sync_task is None:
+            StatisticsService._sync_task = asyncio.create_task(
+                self._background_worker()
+            )
+
+    # ============ Redis Key 生成 ============
+
+    def _stats_key(self, activity_id: str) -> str:
+        """活动统计数据的Redis key"""
+        return f"stats:{activity_id}"
+
+    def _debate_stats_key(self, debate_id: str) -> str:
+        """辩题统计数据的Redis key"""
+        return f"debate_stats:{debate_id}"
+
+    def _dirty_activities_key(self) -> str:
+        """需要同步到数据库的活动ID集合"""
+        return "sync:dirty_activities"
+
+    # ============ 权限检查 ============
 
     def _check_activity_permission(self, activity_id: str, user_id: str) -> Activity:
         """检查用户对活动的权限"""
@@ -53,6 +87,257 @@ class StatisticsService:
                 )
 
         return activity
+
+    # ============ Redis 缓存核心方法 ============
+
+    async def get_activity_statistics(self, activity_id: str) -> Dict[str, Any]:
+        """获取活动实时统计数据（优先从Redis读取）"""
+        cache_key = self._stats_key(activity_id)
+
+        # 尝试从Redis获取
+        cached_data = self.redis.get(cache_key)  # type: ignore
+        if cached_data and isinstance(cached_data, str):
+            return json.loads(cached_data)
+
+        # 缓存未命中，从数据库加载并缓存
+        stats = await self._load_statistics_from_db(activity_id)
+        self.redis.setex(  # type: ignore
+            cache_key,
+            300,  # 5分钟过期
+            json.dumps(stats, ensure_ascii=False)
+        )
+
+        return stats
+
+    async def get_debate_statistics(self, debate_id: str) -> Dict[str, Any]:
+        """获取辩题实时统计数据（优先从Redis读取）"""
+        cache_key = self._debate_stats_key(debate_id)
+
+        # 尝试从Redis获取
+        cached_data = self.redis.get(cache_key)  # type: ignore
+        if cached_data and isinstance(cached_data, str):
+            return json.loads(cached_data)
+
+        # 缓存未命中，从数据库加载
+        stats = await self._load_debate_stats_from_db(debate_id)
+        self.redis.setex(  # type: ignore
+            cache_key,
+            300,  # 5分钟过期
+            json.dumps(stats, ensure_ascii=False)
+        )
+
+        return stats
+
+    async def update_statistics_cache(self, activity_id: str, debate_id: Optional[str] = None):
+        """更新统计数据缓存（投票后调用）"""
+        # 更新活动统计
+        stats = await self._load_statistics_from_db(activity_id)
+        cache_key = self._stats_key(activity_id)
+        self.redis.setex(  # type: ignore
+            cache_key,
+            300,
+            json.dumps(stats, ensure_ascii=False)
+        )
+
+        # 如果指定了辩题，也更新辩题统计
+        if debate_id:
+            debate_stats = await self._load_debate_stats_from_db(debate_id)
+            debate_cache_key = self._debate_stats_key(debate_id)
+            self.redis.setex(  # type: ignore
+                debate_cache_key,
+                300,
+                json.dumps(debate_stats, ensure_ascii=False)
+            )
+
+        # 标记为需要广播
+        await self._schedule_broadcast(activity_id, stats)
+
+    async def _schedule_broadcast(self, activity_id: str, stats: Dict[str, Any]):
+        """调度统计数据广播（防抖：1秒内最多广播一次）"""
+        current_time = datetime.now(timezone.utc).timestamp()
+        last_time = StatisticsService._last_broadcast.get(activity_id, 0)
+
+        # 如果距离上次广播不到1秒，等待
+        if current_time - last_time < 1.0:
+            # 延迟广播
+            await asyncio.sleep(1.0 - (current_time - last_time))
+
+        # 广播统计数据
+        await broadcast_statistics_update(activity_id, stats)
+        StatisticsService._last_broadcast[activity_id] = datetime.now(
+            timezone.utc).timestamp()
+
+    async def _load_statistics_from_db(self, activity_id: str) -> Dict[str, Any]:
+        """从数据库加载统计数据"""
+        # 获取活动信息
+        activity = self.db.query(Activity).filter(
+            Activity.id == activity_id).first()
+        if not activity:
+            return {}
+
+        # 获取当前辩题
+        current_debate = None
+        current_debate_stats = None
+
+        if hasattr(activity, 'current_debate_id') and activity.current_debate_id is not None:
+            debate = self.db.query(Debate).filter(
+                Debate.id == activity.current_debate_id
+            ).first()
+
+            if debate:
+                current_debate = {
+                    "id": str(debate.id),
+                    "title": str(debate.title),
+                    "description": str(debate.description) if debate.description else None,
+                    "status": str(debate.status.value) if hasattr(debate.status, 'value') else str(debate.status),
+                    "order": debate.order
+                }
+
+                # 获取当前辩题的投票统计
+                current_debate_stats = await self._get_debate_vote_stats_from_redis(str(debate.id))
+
+        # 总参与人数
+        total_participants = self.db.query(Participant).filter(
+            Participant.activity_id == activity_id
+        ).count()
+
+        # 已入场人数
+        checked_in_participants = self.db.query(Participant).filter(
+            and_(
+                Participant.activity_id == activity_id,
+                Participant.checked_in == True
+            )
+        ).count()
+
+        # 在线人数（简化版：等于已入场）
+        online_participants = checked_in_participants
+
+        # 总投票数
+        total_votes = self.db.query(Vote).join(
+            Participant, Vote.participant_id == Participant.id
+        ).filter(Participant.activity_id == activity_id).count()
+
+        # 投票率
+        vote_rate = 0.0
+        if checked_in_participants > 0 and current_debate_stats:
+            current_votes = current_debate_stats.get('totalVotes', 0)
+            vote_rate = round(current_votes / checked_in_participants * 100, 2)
+
+        return {
+            "activityId": str(activity.id),
+            "activityName": str(activity.name),
+            "activityStatus": str(activity.status.value) if hasattr(activity.status, 'value') else str(activity.status),
+            "currentDebate": current_debate,
+            "currentDebateStats": current_debate_stats,
+            "realTimeStats": {
+                "totalParticipants": total_participants,
+                "checkedInParticipants": checked_in_participants,
+                "onlineParticipants": online_participants,
+                "totalVotes": total_votes,
+                "voteRate": vote_rate
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    async def _get_debate_vote_stats_from_redis(self, debate_id: str) -> Dict[str, Any]:
+        """获取辩题的投票统计（从Redis或数据库）"""
+        # 统计各立场的票数
+        vote_counts = self.db.query(
+            Vote.position,
+            func.count(Vote.id).label('count')
+        ).filter(Vote.debate_id == debate_id).group_by(Vote.position).all()
+
+        pro_votes = 0
+        con_votes = 0
+        abstain_votes = 0
+
+        for position, count in vote_counts:
+            if position == 'pro':
+                pro_votes = count
+            elif position == 'con':
+                con_votes = count
+            elif position == 'abstain':
+                abstain_votes = count
+
+        total_votes = pro_votes + con_votes + abstain_votes
+
+        # 计算百分比
+        pro_percentage = round(pro_votes / total_votes *
+                               100, 2) if total_votes > 0 else 0.0
+        con_percentage = round(con_votes / total_votes *
+                               100, 2) if total_votes > 0 else 0.0
+        abstain_percentage = round(
+            abstain_votes / total_votes * 100, 2) if total_votes > 0 else 0.0
+
+        return {
+            "debateId": debate_id,
+            "proVotes": pro_votes,
+            "conVotes": con_votes,
+            "abstainVotes": abstain_votes,
+            "totalVotes": total_votes,
+            "proPercentage": pro_percentage,
+            "conPercentage": con_percentage,
+            "abstainPercentage": abstain_percentage
+        }
+
+    async def _load_debate_stats_from_db(self, debate_id: str) -> Dict[str, Any]:
+        """从数据库加载辩题统计"""
+        debate = self.db.query(Debate).filter(Debate.id == debate_id).first()
+        if not debate:
+            return {}
+
+        vote_stats = await self._get_debate_vote_stats_from_redis(debate_id)
+
+        return {
+            "debateId": debate_id,
+            "debateTitle": str(debate.title),
+            "debateStatus": str(debate.status.value) if hasattr(debate.status, 'value') else str(debate.status),
+            "voteStats": vote_stats,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    async def _background_worker(self):
+        """后台同步任务：每2.5秒刷新活跃活动的统计缓存"""
+        while True:
+            try:
+                await asyncio.sleep(2.5)
+
+                # 获取所有正在进行中的活动
+                from src.schemas.activity import ActivityStatus
+                from src.core.database import SessionLocal
+
+                db = SessionLocal()
+
+                try:
+                    active_activities = db.query(Activity).filter(
+                        Activity.status == ActivityStatus.ongoing
+                    ).all()
+
+                    for activity in active_activities:
+                        try:
+                            # 重新加载统计数据到缓存
+                            stats = await self._load_statistics_from_db(str(activity.id))
+
+                            # 更新Redis缓存（延长TTL）
+                            cache_key = self._stats_key(str(activity.id))
+                            self.redis.setex(  # type: ignore
+                                cache_key,
+                                300,  # 5分钟TTL
+                                json.dumps(stats, ensure_ascii=False)
+                            )
+
+                        except Exception as e:
+                            print(
+                                f"Failed to refresh stats for activity {activity.id}: {e}")
+
+                finally:
+                    db.close()
+
+            except Exception as e:
+                print(f"Statistics cache sync error: {e}")
+                await asyncio.sleep(5)
+
+    # ============ Dashboard 数据（兼容旧接口）============
 
     def get_dashboard_data(self, activity_id: str, user_id: str) -> DashboardData:
         """获取实时数据看板"""
@@ -86,7 +371,25 @@ class StatisticsService:
         )
 
     def _get_real_time_stats(self, activity_id: str) -> RealTimeStats:
-        """获取实时统计数据"""
+        """获取实时统计数据（优先从Redis缓存读取）"""
+        # 尝试从Redis获取
+        cache_key = self._stats_key(activity_id)
+        cached_data = self.redis.get(cache_key)  # type: ignore
+
+        if cached_data and isinstance(cached_data, str):
+            stats = json.loads(cached_data)
+            real_time_stats = stats.get('realTimeStats', {})
+            return RealTimeStats(
+                totalParticipants=real_time_stats.get('totalParticipants', 0),
+                checkedInParticipants=real_time_stats.get(
+                    'checkedInParticipants', 0),
+                onlineParticipants=real_time_stats.get(
+                    'onlineParticipants', 0),
+                totalVotes=real_time_stats.get('totalVotes', 0),
+                voteRate=real_time_stats.get('voteRate', 0.0)
+            )
+
+        # 缓存未命中，从数据库查询
         # 总参与人数
         total_participants = self.db.query(Participant).filter(
             Participant.activity_id == activity_id
@@ -772,3 +1075,130 @@ class StatisticsService:
         buffer.close()
 
         return excel_content
+
+
+# 辅助函数：用于大屏实时数据
+async def get_activity_statistics(db: Session, activity_id: str) -> dict:
+    """
+    获取活动的实时统计数据（用于大屏显示）
+    Returns complete statistics for screen display
+    """
+    try:
+        # 获取活动信息
+        activity = db.query(Activity).filter(
+            Activity.id == activity_id).first()
+        if not activity:
+            raise ValueError(f"Activity {activity_id} not found")
+
+        # 获取当前辩题
+        current_debate = None
+        current_debate_data = None
+        if hasattr(activity, 'current_debate_id') and activity.current_debate_id is not None:
+            debate = db.query(Debate).filter(
+                Debate.id == activity.current_debate_id
+            ).first()
+            if debate:
+                current_debate = str(debate.id)
+                current_debate_data = {
+                    "id": str(debate.id),
+                    "title": debate.title,
+                    "description": debate.description,
+                    "status": debate.status.value if hasattr(debate, 'status') else 'unknown'
+                }
+
+        # 获取所有辩题的投票统计
+        debates = db.query(Debate).filter(
+            Debate.activity_id == activity_id
+        ).all()
+
+        debate_statistics = []
+        for debate in debates:
+            # 正方票数
+            affirmative_votes = db.query(Vote).filter(
+                and_(
+                    Vote.debate_id == debate.id,
+                    Vote.side == 'affirmative'
+                )
+            ).count()
+
+            # 反方票数
+            negative_votes = db.query(Vote).filter(
+                and_(
+                    Vote.debate_id == debate.id,
+                    Vote.side == 'negative'
+                )
+            ).count()
+
+            # 总票数
+            total_votes = affirmative_votes + negative_votes
+
+            # 计算百分比
+            affirmative_percentage = (
+                affirmative_votes / total_votes * 100) if total_votes > 0 else 0
+            negative_percentage = (
+                negative_votes / total_votes * 100) if total_votes > 0 else 0
+
+            debate_statistics.append({
+                "debate_id": str(debate.id),
+                "title": debate.title,
+                "status": debate.status.value if hasattr(debate, 'status') else 'unknown',
+                "affirmative_votes": affirmative_votes,
+                "negative_votes": negative_votes,
+                "total_votes": total_votes,
+                "affirmative_percentage": round(affirmative_percentage, 2),
+                "negative_percentage": round(negative_percentage, 2),
+                "is_current": str(debate.id) == current_debate
+            })
+
+        # 参与者统计
+        total_participants = db.query(Participant).filter(
+            Participant.activity_id == activity_id
+        ).count()
+
+        checked_in_participants = db.query(Participant).filter(
+            and_(
+                Participant.activity_id == activity_id,
+                Participant.checked_in == True
+            )
+        ).count()
+
+        # 总投票数
+        total_votes_count = db.query(Vote).join(Debate).filter(
+            Debate.activity_id == activity_id
+        ).count()
+
+        return {
+            "activity_id": str(activity_id),
+            "activity_name": activity.name,
+            "activity_status": activity.status.value if hasattr(activity, 'status') else 'unknown',
+            "current_debate": current_debate_data,
+            "participants": {
+                "total": total_participants,
+                "checked_in": checked_in_participants,
+                "participation_rate": round(
+                    (checked_in_participants / total_participants *
+                     100) if total_participants > 0 else 0,
+                    2
+                )
+            },
+            "total_votes": total_votes_count,
+            "debates": debate_statistics,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        print(f"Error getting activity statistics: {e}")
+        raise
+
+
+# ============ 全局服务实例 ============
+
+_statistics_service: Optional[StatisticsService] = None
+
+
+def get_statistics_service(db: Session) -> StatisticsService:
+    """获取统计服务实例（统一入口）"""
+    global _statistics_service
+    if _statistics_service is None:
+        _statistics_service = StatisticsService(db)
+    return _statistics_service

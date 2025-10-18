@@ -6,11 +6,14 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+import socketio
+
 from src.api.v1.router import api_router
 from src.config import settings
 from src.core.database import init_database
 from src.core.exceptions import AppException
 from src.core.redis import RedisClient
+from src.core.socketio_manager import sio
 
 
 def create_app() -> FastAPI:
@@ -107,3 +110,10 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+# 将 Socket.IO 包装到 ASGI 应用中
+socket_app = socketio.ASGIApp(
+    sio,
+    other_asgi_app=app,
+    socketio_path='/socket.io'
+)

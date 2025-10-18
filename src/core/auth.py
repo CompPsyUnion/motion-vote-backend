@@ -23,17 +23,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def create_refresh_token(data: dict) -> str:
-    """创建刷新令牌"""
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + \
-        timedelta(days=settings.refresh_token_expire_days)
-    to_encode.update({"exp": expire, "type": "refresh"})
-    encoded_jwt = jwt.encode(
-        to_encode, settings.secret_key, algorithm=settings.algorithm)
-    return encoded_jwt
-
-
 def verify_token(token: str) -> Optional[dict]:
     """验证令牌"""
     try:

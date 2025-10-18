@@ -4,6 +4,7 @@
 - Redis：实时投票，毫秒级响应
 - 数据库：持久化存储，数据安全
 - 定时同步：每2秒将Redis数据批量写入数据库
+- 统计缓存：投票后自动更新统计并广播（1秒防抖）
 """
 
 import asyncio
@@ -360,9 +361,15 @@ class VoteService:
         # 执行所有Redis操作
         pipe.execute()
 
-        # 6. 广播WebSocket更新
+        # 6. 广播WebSocket更新和统计缓存更新
         try:
+            # 导入统计服务（延迟导入避免循环依赖）
+            from src.services.statistics_service import get_statistics_service
+
+            # 获取投票结果用于广播
             vote_results = self.get_debate_results(debate_id)
+
+            # 广播投票更新（已废弃，由 statistics_update 替代）
             asyncio.create_task(
                 manager.broadcast_vote_update(
                     activity_id,
@@ -375,8 +382,15 @@ class VoteService:
                     }
                 )
             )
+
+            # 更新统计缓存并触发广播（1秒防抖）
+            stats_service = get_statistics_service(self.db)
+            asyncio.create_task(
+                stats_service.update_statistics_cache(activity_id, debate_id)
+            )
+
         except Exception as e:
-            print(f"WebSocket广播失败: {e}")
+            print(f"WebSocket广播或统计更新失败: {e}")
 
         return {
             "vote_id": vote_id,

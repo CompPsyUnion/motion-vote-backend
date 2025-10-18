@@ -1,20 +1,18 @@
 from sqlalchemy.orm import Session
-from src.config import settings
-from src.core.auth import (create_access_token, create_refresh_token,
-                           get_password_hash, verify_password, verify_token)
+from src.core.auth import (create_access_token, get_password_hash, verify_password, verify_token)
 from src.core.exceptions import AuthenticationError, ValidationError
 from src.core.redis import get_redis
 from src.models.user import User
-from src.schemas.user import (ForgotPasswordRequest, RegisterRequest,
-                              LoginRequest, UserResponse, UserRole)
-from src.services.redis_verification_service import \
-    RedisVerificationCodeService
+from src.schemas.user import (ForgotPasswordRequest, LoginRequest,
+                              RegisterRequest, UserResponse, UserRole)
+
+from backend.src.services.verification_service import VerificationCodeService
 
 
 class AuthService:
     def __init__(self, db: Session):
         self.db = db
-        self.verification_service = RedisVerificationCodeService()
+        self.verification_service = VerificationCodeService()
         self.redis = get_redis()
 
     async def register(self, user_data: RegisterRequest) -> dict:

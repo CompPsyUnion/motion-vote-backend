@@ -8,11 +8,11 @@ from src.core.database import get_db
 from src.schemas.base import ApiResponse
 from src.schemas.email_verification import (EmailVerificationResponse,
                                             VerificationCodeData)
-from src.schemas.user import (
-    ForgotPasswordRequest, RegisterRequest, LoginRequest)
+from src.schemas.user import (ForgotPasswordRequest, LoginRequest,
+                              RegisterRequest)
 from src.services.auth_service import AuthService
-from src.services.redis_verification_service import \
-    RedisVerificationCodeService
+
+from backend.src.services.verification_service import VerificationCodeService
 
 router = APIRouter()
 security = HTTPBearer()
@@ -21,7 +21,7 @@ security = HTTPBearer()
 @router.get("/getcode", response_model=EmailVerificationResponse)
 async def send_verification_code(email: str = Query(..., description="Email address")):
     """Send verification code to email"""
-    verification_service = RedisVerificationCodeService()
+    verification_service = VerificationCodeService()
     result = await verification_service.send_verification_code(email, "register")
     return EmailVerificationResponse(
         success=True,

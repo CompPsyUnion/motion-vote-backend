@@ -52,7 +52,7 @@ services:
   # FastAPI应用
   motion-vote-api:
     # build: .
-    image: ghcr.io/comppsyunion/motion-vote-backend
+    image: ghcr.io/comppsyunion/motion-vote-backend:latest
     container_name: motion-vote-api
     restart: unless-stopped
     ports:

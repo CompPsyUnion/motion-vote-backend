@@ -23,6 +23,11 @@ class Debate(Base):
     estimated_duration = Column(Integer, nullable=True)
     order = Column(Integer, nullable=False, default=0)
 
+    # 辩题时间跟踪
+    started_at = Column(DateTime(timezone=True),
+                        nullable=True, comment="辩题开始时间")
+    ended_at = Column(DateTime(timezone=True), nullable=True, comment="辩题结束时间")
+
     # 外键
     activity_id = Column(String(36), ForeignKey(
         "activities.id"), nullable=False)
@@ -32,6 +37,7 @@ class Debate(Base):
                         server_default=func.now(), onupdate=func.now())
 
     # 关系
-    activity = relationship("Activity", back_populates="debates")
+    activity = relationship("Activity", back_populates="debates",
+                            foreign_keys=[activity_id])
     votes = relationship("Vote", back_populates="debate",
                          cascade="all, delete-orphan")

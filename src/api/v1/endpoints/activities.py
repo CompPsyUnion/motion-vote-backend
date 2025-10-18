@@ -1,306 +1,190 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, text, select, union_all
+"""活动管理 API 端点
+
+基于 OpenAPI 规范实现的活动管理接口，包括：
+- 活动的CRUD操作
+- 协作者管理
+- 权限控制
+"""
+
 from typing import List, Optional
-from math import ceil
-from src.api.dependencies import get_db, get_current_user
-from src.models.activity import Activity, Collaborator
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+from src.api.dependencies import get_current_user, get_db
 from src.models.user import User
-from src.schemas.activity import (
-    ActivityResponse, ActivityCreate, ActivityUpdate,
-    PaginatedActivities, CollaboratorResponse, CollaboratorInvite, CollaboratorUpdate,
-    ActivityStatus, CollaboratorStatus
-)
+from src.schemas.activity import (ActivityCreate, ActivityDetail,
+                                  ActivityResponse, ActivityUpdate,
+                                  CollaboratorInvite, CollaboratorResponse,
+                                  CollaboratorUpdate, PaginatedActivities)
+from src.schemas.base import ApiResponse
+from src.services.activity_service import ActivityService
 
 router = APIRouter()
 
 
-@router.get("/activities", response_model=PaginatedActivities)
+@router.get("/", response_model=PaginatedActivities)
 async def get_activities(
-    page: int = Query(1, ge=1, description="页码"),
-    limit: int = Query(20, ge=1, le=100, description="每页数量"),
-    status: Optional[ActivityStatus] = Query(None, description="活动状态筛选"),
+    page: int = Query(default=1, ge=1, description="页码"),
+    limit: int = Query(default=20, ge=1, le=100, description="每页数量"),
+    status: Optional[str] = Query(
+        default=None, description="活动状态筛选 (upcoming|ongoing|ended)"),
     role: Optional[str] = Query(
-        None, description="用户角色筛选", regex="^(owner|collaborator)$"),
-    search: Optional[str] = Query(None, description="搜索关键词"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+        default=None, description="用户角色筛选 (owner|collaborator)"),
+    search: Optional[str] = Query(
+        default=None, description="搜索关键词 - 支持活动名称、描述、地址模糊匹配"),
+    name: Optional[str] = Query(default=None, description="活动名称模糊匹配"),
+    location: Optional[str] = Query(default=None, description="活动地址模糊匹配"),
+    tags: Optional[str] = Query(default=None, description="标签搜索，多个标签用逗号分隔"),
+    date_from: Optional[str] = Query(
+        default=None, description="开始时间筛选 (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(
+        default=None, description="结束时间筛选 (YYYY-MM-DD)"),
+    sort_by: Optional[str] = Query(
+        default="created_at", description="排序字段 (created_at|name|start_time)"),
+    sort_order: Optional[str] = Query(
+        default="desc", description="排序方向 (asc|desc)"),
+    db: Session = Depends(get_db)
 ):
-    """获取活动列表"""
-    query = db.query(Activity)
+    """获取用户创建和参与的活动列表
 
-    # 筛选用户相关的活动
-    if role == "owner":
-        query = query.filter(Activity.owner_id == str(current_user.id))
-    elif role == "collaborator":
-        # 获取用户作为协作者的活动ID
-        collaborator_activity_ids = db.query(Collaborator.activity_id).filter(
-            Collaborator.user_id == str(current_user.id),
-            Collaborator.status == CollaboratorStatus.accepted
-        ).subquery()
-        # 使用 select() 取出子查询的列，确保类型兼容
-        query = query.filter(Activity.id.in_(
-            select(collaborator_activity_ids.c.activity_id)))
-    else:
-        # 默认获取用户创建或协作者的活动
-        all_ids = union_all(
-            select(Activity.id.label('activity_id')).where(
-                Activity.owner_id == str(current_user.id)),
-            select(Collaborator.activity_id.label('activity_id')).where(
-                Collaborator.user_id == str(current_user.id),
-                Collaborator.status == CollaboratorStatus.accepted
-            )
-        ).subquery()
-        query = query.filter(Activity.id.in_(select(all_ids.c.activity_id)))
+    支持多种筛选和搜索方式：
+    - search: 全文搜索(名称、描述、地址)
+    - name: 活动名称模糊匹配
+    - location: 地址模糊匹配
+    - tags: 标签搜索
+    - date_from/date_to: 时间范围筛选
+    - sort_by/sort_order: 自定义排序
+    """
+    service = ActivityService(db)
+    # 构建增强的搜索参数
+    enhanced_search = search
+    if name or location or tags:
+        search_parts = []
+        if enhanced_search:
+            search_parts.append(enhanced_search)
+        if name:
+            search_parts.append(name)
+        if location:
+            search_parts.append(location)
+        if tags:
+            search_parts.extend(tags.split(','))
+        enhanced_search = ' '.join(search_parts)
 
-    # 状态筛选
-    if status:
-        query = query.filter(Activity.status == status)
-
-    # 搜索
-    if search:
-        query = query.filter(
-            or_(
-                Activity.name.ilike(f"%{search}%"),
-                Activity.description.ilike(f"%{search}%"),
-                Activity.location.ilike(f"%{search}%")
-            )
-        )
-
-    # 分页
-    total = query.count()
-    activities = query.offset((page - 1) * limit).limit(limit).all()
-    # Convert ORM objects to schema objects
-    activity_responses = [ActivityResponse.model_validate(
-        activity) for activity in activities]
-
-    return PaginatedActivities(
-        items=activity_responses,
-        total=total,
+    return service.get_activities_paginated(
+        user_id=None,
         page=page,
         limit=limit,
-        pages=ceil(total / limit)
+        status=status,
+        role=role,
+        search=enhanced_search
     )
 
 
-@router.post("/activities", response_model=ActivityResponse)
+@router.post("/", response_model=ActivityResponse, status_code=201)
 async def create_activity(
     activity_data: ActivityCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """创建活动"""
-    activity = Activity(
-        **activity_data.model_dump(),
-        owner_id=str(current_user.id)
-    )
-    db.add(activity)
-    db.commit()
-    db.refresh(activity)
-    return activity
+    """创建新的辩论活动"""
+    service = ActivityService(db)
+    return service.create_activity(activity_data, str(current_user.id))
 
 
-@router.get("/activities/{activity_id}", response_model=ActivityResponse)
-async def get_activity(
+@router.get("/{activity_id}", response_model=ActivityDetail)
+async def get_activity_detail(
     activity_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
-    """获取活动详情"""
-    activity = db.query(Activity).filter(Activity.id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # 检查权限：所有者或协作者
-    if str(activity.owner_id) != str(current_user.id):
-        collaborator = db.query(Collaborator).filter(
-            Collaborator.activity_id == activity_id,
-            Collaborator.user_id == current_user.id,
-            Collaborator.status == CollaboratorStatus.accepted
-        ).first()
-        if not collaborator:
-            raise HTTPException(status_code=403, detail="Permission denied")
-
-    return activity
+    """获取指定活动的详细信息"""
+    service = ActivityService(db)
+    return service.get_activity_detail(activity_id, None)
 
 
-@router.put("/activities/{activity_id}", response_model=ActivityResponse)
+@router.put("/{activity_id}", response_model=ApiResponse)
 async def update_activity(
     activity_id: str,
     activity_data: ActivityUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """更新活动"""
-    activity = db.query(Activity).filter(Activity.id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # 检查权限：所有者或有edit权限的协作者
-    if str(activity.owner_id) != str(current_user.id):
-        collaborator = db.query(Collaborator).filter(
-            Collaborator.activity_id == activity_id,
-            Collaborator.user_id == current_user.id,
-            Collaborator.status == CollaboratorStatus.accepted,
-            text("JSON_CONTAINS(permissions, '\"edit\"') = 1")
-        ).first()
-        if not collaborator:
-            raise HTTPException(status_code=403, detail="Permission denied")
-
-    # 更新字段
-    update_data = activity_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(activity, field, value)
-
-    db.commit()
-    db.refresh(activity)
-    return activity
+    """更新活动信息"""
+    service = ActivityService(db)
+    service.update_activity(activity_id, activity_data, str(current_user.id))
+    return ApiResponse(
+        message="Activity updated successfully"
+    )
 
 
-@router.delete("/activities/{activity_id}")
+@router.delete("/{activity_id}", response_model=ApiResponse)
 async def delete_activity(
     activity_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """删除活动"""
-    activity = db.query(Activity).filter(Activity.id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # 只有所有者可以删除
-    if str(activity.owner_id) != str(current_user.id):
-        raise HTTPException(
-            status_code=403, detail="Only owner can delete activity")
-
-    db.delete(activity)
-    db.commit()
-    return {"message": "Activity deleted successfully"}
+    """删除指定活动"""
+    service = ActivityService(db)
+    service.delete_activity(activity_id, str(current_user.id))
+    return ApiResponse(
+        message="Activity deleted successfully"
+    )
 
 
-@router.get("/activities/{activity_id}/collaborators", response_model=List[CollaboratorResponse])
+@router.get("/{activity_id}/collaborators", response_model=List[CollaboratorResponse])
 async def get_collaborators(
     activity_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """获取协作者列表"""
-    activity = db.query(Activity).filter(Activity.id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # 检查权限：所有者或协作者
-    if str(activity.owner_id) != str(current_user.id):
-        collaborator = db.query(Collaborator).filter(
-            Collaborator.activity_id == activity_id,
-            Collaborator.user_id == current_user.id,
-            Collaborator.status == CollaboratorStatus.accepted
-        ).first()
-        if not collaborator:
-            raise HTTPException(status_code=403, detail="Permission denied")
-
-    collaborators = db.query(Collaborator).filter(
-        Collaborator.activity_id == activity_id).all()
-    return collaborators
+    """获取活动的协作者列表"""
+    service = ActivityService(db)
+    return service.get_collaborators(activity_id, str(current_user.id))
 
 
-@router.post("/activities/{activity_id}/collaborators", response_model=CollaboratorResponse)
+@router.post("/{activity_id}/collaborators", response_model=ApiResponse, status_code=201)
 async def invite_collaborator(
     activity_id: str,
     invite_data: CollaboratorInvite,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """邀请协作者"""
-    activity = db.query(Activity).filter(Activity.id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # 只有所有者可以邀请协作者
-    if str(activity.owner_id) != str(current_user.id):
-        raise HTTPException(
-            status_code=403, detail="Only owner can invite collaborators")
-
-    # 检查用户是否存在
-    user = db.query(User).filter(User.email == invite_data.email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # 检查是否已经是协作者
-    existing = db.query(Collaborator).filter(
-        Collaborator.activity_id == activity_id,
-        Collaborator.user_id == user.id
-    ).first()
-    if existing:
-        raise HTTPException(
-            status_code=400, detail="User is already a collaborator")
-
-    collaborator = Collaborator(
-        user_id=user.id,
-        activity_id=activity_id,
-        permissions=invite_data.permissions
+    """邀请用户成为活动协作者"""
+    service = ActivityService(db)
+    service.invite_collaborator(activity_id, invite_data, str(current_user.id))
+    return ApiResponse(
+        message="Collaborator invited successfully"
     )
-    db.add(collaborator)
-    db.commit()
-    db.refresh(collaborator)
-    return collaborator
 
 
-@router.put("/activities/{activity_id}/collaborators/{collaborator_id}", response_model=CollaboratorResponse)
-async def update_collaborator(
+@router.put("/{activity_id}/collaborators/{collaborator_id}", response_model=ApiResponse)
+async def update_collaborator_permissions(
     activity_id: str,
     collaborator_id: str,
     update_data: CollaboratorUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """更新协作者权限"""
-    activity = db.query(Activity).filter(Activity.id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # 只有所有者可以更新权限
-    if str(activity.owner_id) != str(current_user.id):
-        raise HTTPException(
-            status_code=403, detail="Only owner can update collaborator permissions")
-
-    collaborator = db.query(Collaborator).filter(
-        Collaborator.id == collaborator_id,
-        Collaborator.activity_id == activity_id
-    ).first()
-    if not collaborator:
-        raise HTTPException(status_code=404, detail="Collaborator not found")
-
-    setattr(collaborator, 'permissions', update_data.permissions)
-    db.commit()
-    db.refresh(collaborator)
-    return collaborator
+    """更新协作者的权限设置"""
+    service = ActivityService(db)
+    service.update_collaborator_permissions(
+        activity_id, collaborator_id, update_data, str(current_user.id)
+    )
+    return ApiResponse(
+        message="Collaborator permissions updated successfully"
+    )
 
 
-@router.delete("/activities/{activity_id}/collaborators/{collaborator_id}")
+@router.delete("/{activity_id}/collaborators/{collaborator_id}", response_model=ApiResponse)
 async def remove_collaborator(
     activity_id: str,
     collaborator_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """移除协作者"""
-    activity = db.query(Activity).filter(Activity.id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # 只有所有者可以移除协作者
-    if str(activity.owner_id) != str(current_user.id):
-        raise HTTPException(
-            status_code=403, detail="Only owner can remove collaborators")
-
-    collaborator = db.query(Collaborator).filter(
-        Collaborator.id == collaborator_id,
-        Collaborator.activity_id == activity_id
-    ).first()
-    if not collaborator:
-        raise HTTPException(status_code=404, detail="Collaborator not found")
-
-    db.delete(collaborator)
-    db.commit()
-    return {"message": "Collaborator removed successfully"}
+    """从活动中移除协作者"""
+    service = ActivityService(db)
+    service.remove_collaborator(
+        activity_id, collaborator_id, str(current_user.id))
+    return ApiResponse(
+        message="Collaborator removed successfully"
+    )

@@ -10,6 +10,9 @@
 
 - **用户管理**：注册登录、权限控制
 - **活动管理**：创建活动、协作管理、参与者管理
+  - 支持CSV和Excel格式批量导入参与者
+  - 提供导入模板下载功能
+  - 智能编码识别，支持多种中文编码
 - **辩题管理**：创建辩题、状态控制、实时切换
 - **投票系统**：参与者入场、投票改票、结果锁定
 - **大屏展示**：实时数据展示、主题控制
@@ -108,6 +111,26 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 - OpenAPI JSON: <http://localhost:8000/api/openapi.json>
 
 ## 开发指南
+
+### 参与者批量导入功能
+
+系统支持CSV和Excel两种格式的批量导入，详细文档：
+
+- 📚 [快速开始指南](./docs/QUICK_START.md) - 5分钟快速上手
+- 📖 [完整使用指南](./docs/participant_import_guide.md) - 详细的使用说明
+- 🔧 [功能文档](./docs/FEATURE_PARTICIPANT_IMPORT.md) - 技术实现细节
+- 📝 [示例文件](./docs/examples/participant_import_example.csv) - CSV格式示例
+
+**快速示例**：
+```bash
+# 1. 下载模板
+curl -X GET "http://localhost:8000/api/v1/{activity_id}/participants/template?format=csv" \
+  -H "Authorization: Bearer {token}" -o template.csv
+
+# 2. 填写数据后上传
+curl -X POST "http://localhost:8000/api/v1/{activity_id}/participants/batch" \
+  -H "Authorization: Bearer {token}" -F "file=@participants.csv"
+```
 
 ### API 设计规范
 

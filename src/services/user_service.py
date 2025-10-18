@@ -1,10 +1,11 @@
-from typing import List, Optional
+from typing import Optional
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from src.core.exceptions import NotFoundError
 from src.models.user import User
 from src.schemas.base import PaginatedResponse
-from src.schemas.user import UserUpdate
+from src.schemas.user import UserResponse, UserRole, UserUpdate
 
 
 class UserService:
@@ -19,6 +20,11 @@ class UserService:
 
         # 更新用户信息
         update_data = user_update.dict(exclude_unset=True)
+
+        # 如空则不变
+        if 'role' in update_data and not update_data['role']:
+            update_data.pop('role')
+
         for key, value in update_data.items():
             setattr(user, key, value)
 
@@ -45,9 +51,10 @@ class UserService:
         users = query.offset(offset).limit(limit).all()
 
         return PaginatedResponse(
-            items=[user.__dict__ for user in users],
+            items=[UserResponse.model_validate(
+                user).model_dump() for user in users],
             total=total,
             page=page,
             limit=limit,
-            total_pages=(total + limit - 1) // limit
+            totalPages=(total + limit - 1) // limit
         )

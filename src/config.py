@@ -1,11 +1,12 @@
-from pydantic_settings import BaseSettings
 from typing import List
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://username:password@localhost:5432/motionvote"
-    test_database_url: str = "postgresql://username:password@localhost:5432/motionvote_test"
+    database_url: str = "postgresql://postgres:password@localhost:5432/motionvote"
+    test_database_url: str = "postgresql://postgres:password@localhost:5432/motionvote_test"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -22,6 +23,10 @@ class Settings(BaseSettings):
     smtp_host: str = "smtp.gmail.com"
     smtp_user: str = ""
     smtp_password: str = ""
+
+    # SMTP Service (smtogo)
+    smtp_service_url: str = "http://motion-vote-smtogo:8000"
+    smtp_api_key: str = "your-api-key"
 
     # Application
     app_name: str = "Motion Vote API"

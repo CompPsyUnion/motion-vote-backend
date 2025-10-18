@@ -1,13 +1,19 @@
+import time
+import uuid
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-import time
-import uuid
+import socketio
 
-from src.config import settings
 from src.api.v1.router import api_router
+from src.config import settings
+from src.core.database import init_database
 from src.core.exceptions import AppException
+from src.core.redis import RedisClient
+from src.core.socketio_manager import sio
 
 
 def create_app() -> FastAPI:
@@ -76,7 +82,38 @@ def create_app() -> FastAPI:
     # 包含API路由
     app.include_router(api_router, prefix="/api")
 
+    # 添加启动事件
+    # 使用 lifespan 事件处理器替代 on_event
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """应用启动和关闭时执行"""
+        # 初始化数据库
+        init_database()
+
+        # 初始化Redis连接（测试连接）
+        try:
+            redis_client = RedisClient.get_instance()
+            redis_client.ping()
+            print("✅ Redis连接成功")
+        except Exception as e:
+            print(f"❌ Redis连接失败: {e}")
+
+        yield
+
+        # 关闭Redis连接
+        RedisClient.close()
+
+    app.router.lifespan_context = lifespan
+
     return app
 
 
 app = create_app()
+
+# 将 Socket.IO 包装到 ASGI 应用中
+socket_app = socketio.ASGIApp(
+    sio,
+    other_asgi_app=app,
+    socketio_path='/socket.io'
+)

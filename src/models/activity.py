@@ -1,13 +1,12 @@
 import uuid
 
-from sqlalchemy import JSON, Boolean, Column, DateTime
+from sqlalchemy import JSON, Column, DateTime
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from src.core.database import Base
-from src.schemas.activity import (ActivityStatus, CollaboratorPermission,
-                                  CollaboratorStatus)
+from src.schemas.activity import (ActivityStatus, CollaboratorStatus)
 
 
 class Activity(Base):
@@ -42,7 +41,8 @@ class Activity(Base):
     collaborators = relationship(
         "Collaborator", back_populates="activity", cascade="all, delete-orphan")
     debates = relationship(
-        "Debate", back_populates="activity", cascade="all, delete-orphan")
+        "Debate", back_populates="activity", cascade="all, delete-orphan",
+        foreign_keys="[Debate.activity_id]")
     participants = relationship(
         "Participant", back_populates="activity", cascade="all, delete-orphan")
     current_debate = relationship("Debate", foreign_keys=[current_debate_id])

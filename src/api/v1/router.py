@@ -1,7 +1,7 @@
 from fastapi import APIRouter
-from src.api.v1.endpoints import (activities, auth, debates,
-                                  participant_resources, participants, screen,
-                                  site, statistics, users, votes, websocket)
+from src.api.v1.endpoints import (activities, auth, debates, participants,
+                                  screen, site, statistics, users, votes,
+                                  websocket)
 
 api_router = APIRouter()
 
@@ -16,15 +16,12 @@ api_router.include_router(
     activities.router, prefix="/activities", tags=["activities"])
 
 # 辩题管理路由
-api_router.include_router(debates.router, tags=["debates"])
-
-# 参与者管理路由 - activities下的participants资源
 api_router.include_router(
-    participants.router, prefix="/activities", tags=["participants"])
+    debates.router, prefix="/debates", tags=["debates"])
 
-# 独立的参与者资源路由 (links, qrcodes等)
+# 参与者管理路由
 api_router.include_router(
-    participant_resources.router, tags=["participants"])
+    participants.router, prefix="/participants", tags=["participants"])
 
 # 投票系统路由
 api_router.include_router(votes.router, prefix="/votes", tags=["votes"])

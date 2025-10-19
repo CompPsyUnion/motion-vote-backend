@@ -23,8 +23,8 @@ from src.schemas.activity import (ActivityCreate, ActivityDetail,
                                   ActivityDetailStatistics, ActivityResponse,
                                   ActivityStatus, ActivityUpdate,
                                   CollaboratorInvite, CollaboratorPermission,
-                                  CollaboratorResponse,
-                                  CollaboratorUpdate, PaginatedActivities)
+                                  CollaboratorResponse, CollaboratorUpdate,
+                                  PaginatedActivities)
 from src.schemas.debate import DebateResponse
 
 
@@ -165,22 +165,6 @@ class ActivityService:
         self.db.add(activity)
         self.db.commit()
         self.db.refresh(activity)
-
-        return ActivityResponse.model_validate(activity)
-
-    def get_activity_by_id(self, activity_id: str, user_id: str) -> ActivityResponse:
-        """根据ID获取活动"""
-        activity = self.db.query(Activity).filter(
-            Activity.id == activity_id).first()
-        if not activity:
-            raise HTTPException(status_code=404, detail="Activity not found")
-
-        # 检查权限：所有者或协作者
-        if str(activity.owner_id) != user_id:
-            collaborator = self._get_user_collaboration(activity_id, user_id)
-            if not collaborator:
-                raise HTTPException(
-                    status_code=403, detail="Permission denied")
 
         return ActivityResponse.model_validate(activity)
 
@@ -513,3 +497,56 @@ class ActivityService:
             return False
 
         return required_permission in collaborator.permissions
+
+    def check_activity_permission(
+        self,
+        activity_id: str,
+        user_id: str,
+        required_permission: str
+    ) -> Activity:
+        """检查活动权限并返回活动对象
+
+        Args:
+            activity_id: 活动ID
+            user_id: 用户ID
+            required_permission: 所需权限 ("view", "edit", "control")
+
+        Returns:
+            Activity对象
+
+        Raises:
+            HTTPException: 活动不存在或权限不足
+        """
+        activity = self.db.query(Activity).filter(
+            Activity.id == activity_id
+        ).first()
+
+        if not activity:
+            raise HTTPException(status_code=404, detail="Activity not found")
+
+        # 检查是否为所有者
+        if str(activity.owner_id) == str(user_id):
+            return activity
+
+        # 检查协作者权限
+        collaborator = self.db.query(Collaborator).filter(
+            Collaborator.activity_id == activity_id,
+            Collaborator.user_id == user_id
+        ).first()
+
+        if not collaborator:
+            raise HTTPException(status_code=403, detail="Permission denied")
+
+        # 检查具体权限
+        if required_permission == "view":
+            # view权限所有协作者都有
+            return activity
+        elif required_permission in ["edit", "control"]:
+            # 检查是否有相应权限
+            if required_permission not in collaborator.permissions:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Insufficient permissions"
+                )
+
+        return activity

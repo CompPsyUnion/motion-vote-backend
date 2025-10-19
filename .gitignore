@@ -211,3 +211,7 @@ Thumbs.db
 
 config/
 data/
+
+# Logs
+logs/
+*.log

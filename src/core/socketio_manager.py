@@ -3,22 +3,40 @@ Socket.IO Manager for real-time screen updates
 大屏实时数据推送管理器
 """
 from datetime import datetime
+import logging
 from typing import Any, Dict, Optional
+import traceback
 
 import socketio
 from src.config import settings
+from src.utils.logger import socketio_logger
 
 # 创建 Socket.IO 服务器实例
 # 允许所有源访问以便于开发和部署
-print(f"Settings CORS origins: {settings.cors_origins}")
+socketio_logger.info(f"Settings CORS origins: {settings.cors_origins}")
+socketio_logger.info("Initializing Socket.IO server with CORS: *")
+
+# 配置 Socket.IO 和 Engine.IO 的日志
+sio_internal_logger = logging.getLogger('socketio.server')
+sio_internal_logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter(
+    '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'))
+sio_internal_logger.addHandler(handler)
+
+engineio_internal_logger = logging.getLogger('engineio.server')
+engineio_internal_logger.setLevel(logging.DEBUG)
+engineio_internal_logger.addHandler(handler)
 
 sio = socketio.AsyncServer(
     async_mode='asgi',
     cors_allowed_origins='*',  # 允许所有源访问
     cors_credentials=False,     # 不需要凭证
-    logger=True,
-    engineio_logger=True,
+    logger=True,  # 启用内部日志
+    engineio_logger=True,  # 启用 Engine.IO 日志
 )
+
+socketio_logger.info("Socket.IO server initialized successfully")
 
 
 class ScreenSocketManager:
@@ -76,37 +94,66 @@ screen_manager = ScreenSocketManager()
 @sio.event
 async def connect(sid, environ, auth):
     """客户端连接事件"""
-    origin = environ.get('HTTP_ORIGIN', 'unknown')
-    user_agent = environ.get('HTTP_USER_AGENT', 'unknown')
-    print(
-        f"Client connected: {sid}, Origin: {origin}, User-Agent: {user_agent[:100]}")
+    try:
+        origin = environ.get('HTTP_ORIGIN', 'unknown')
+        user_agent = environ.get('HTTP_USER_AGENT', 'unknown')
+        host = environ.get('HTTP_HOST', 'unknown')
+        path = environ.get('PATH_INFO', 'unknown')
+        method = environ.get('REQUEST_METHOD', 'unknown')
 
-    await sio.emit('connection_status', {
-        'status': 'connected',
-        'session_id': sid,
-        'timestamp': datetime.now().isoformat()
-    }, room=sid)
+        socketio_logger.info("=" * 80)
+        socketio_logger.info("🔗 Socket.IO Connection Attempt")
+        socketio_logger.info(f"   Session ID: {sid}")
+        socketio_logger.info(f"   Origin: {origin}")
+        socketio_logger.info(f"   Host: {host}")
+        socketio_logger.info(f"   Path: {path}")
+        socketio_logger.info(f"   Method: {method}")
+        socketio_logger.info(f"   User-Agent: {user_agent[:100]}")
+        socketio_logger.info(f"   Auth: {auth}")
+        socketio_logger.info("=" * 80)
+
+        await sio.emit('connection_status', {
+            'status': 'connected',
+            'session_id': sid,
+            'timestamp': datetime.now().isoformat()
+        }, room=sid)
+
+        socketio_logger.info(
+            f"✅ Client {sid} connected successfully from {origin}")
+    except Exception as e:
+        socketio_logger.error(f"❌ Error in connect handler: {e}")
+        socketio_logger.error(traceback.format_exc())
 
 
 @sio.event
 async def disconnect(sid):
     """客户端断开连接事件"""
-    print(f"Client disconnected: {sid}")
-    screen_manager.remove_connection(sid)
+    try:
+        socketio_logger.info(f"🔌 Client disconnected: {sid}")
+        screen_manager.remove_connection(sid)
+    except Exception as e:
+        socketio_logger.error(f"❌ Error in disconnect handler: {e}")
+        socketio_logger.error(traceback.format_exc())
 
 
 @sio.event
 async def connect_error(sid, data):
     """连接错误处理"""
-    print(f"Connection error for {sid}: {data}")
+    socketio_logger.error(f"❌ Connection error for {sid}: {data}")
+    socketio_logger.error(f"   Error data: {data}")
 
 
 @sio.event
 async def join_screen(sid, data):
     """加入大屏房间"""
     try:
+        socketio_logger.info(f"📥 Received join_screen request from {sid}")
+        socketio_logger.debug(f"   Data: {data}")
+
         activity_id = data.get('activity_id')
         if not activity_id:
+            socketio_logger.warning(
+                f"⚠️ Missing activity_id in join_screen request from {sid}")
             await sio.emit('error', {
                 'message': 'activity_id is required'
             }, room=sid)
@@ -123,10 +170,12 @@ async def join_screen(sid, data):
             'timestamp': datetime.now().isoformat()
         }, room=sid)
 
-        print(f"Client {sid} joined screen room: {activity_id}")
+        socketio_logger.info(
+            f"✅ Client {sid} joined screen room: {activity_id}")
 
     except Exception as e:
-        print(f"Error in join_screen: {e}")
+        socketio_logger.error(f"❌ Error in join_screen: {e}")
+        socketio_logger.error(traceback.format_exc())
         await sio.emit('error', {
             'message': str(e)
         }, room=sid)
@@ -136,6 +185,7 @@ async def join_screen(sid, data):
 async def leave_screen(sid, data):
     """离开大屏房间"""
     try:
+        socketio_logger.info(f"📤 Received leave_screen request from {sid}")
         activity_id = screen_manager.get_activity_id(sid)
         if activity_id:
             await sio.leave_room(sid, f"screen_{activity_id}")
@@ -147,10 +197,12 @@ async def leave_screen(sid, data):
                 'timestamp': datetime.now().isoformat()
             }, room=sid)
 
-            print(f"Client {sid} left screen room: {activity_id}")
+            socketio_logger.info(
+                f"✅ Client {sid} left screen room: {activity_id}")
 
     except Exception as e:
-        print(f"Error in leave_screen: {e}")
+        socketio_logger.error(f"❌ Error in leave_screen: {e}")
+        socketio_logger.error(traceback.format_exc())
         await sio.emit('error', {
             'message': str(e)
         }, room=sid)
@@ -160,6 +212,9 @@ async def leave_screen(sid, data):
 async def request_screen_data(sid, data):
     """请求大屏数据"""
     try:
+        socketio_logger.info(f"📊 Received request_screen_data from {sid}")
+        socketio_logger.debug(f"   Data: {data}")
+
         activity_id = data.get('activity_id')
         if not activity_id:
             await sio.emit('error', {
@@ -175,8 +230,12 @@ async def request_screen_data(sid, data):
             'message': 'Please implement database query in screen endpoint'
         }, room=sid)
 
+        socketio_logger.info(
+            f"✅ Sent screen_data to {sid} for activity {activity_id}")
+
     except Exception as e:
-        print(f"Error in request_screen_data: {e}")
+        socketio_logger.error(f"❌ Error in request_screen_data: {e}")
+        socketio_logger.error(traceback.format_exc())
         await sio.emit('error', {
             'message': str(e)
         }, room=sid)
@@ -188,9 +247,10 @@ async def broadcast_to_screen(activity_id: str, event: str, data: Dict[str, Any]
     try:
         room = f"screen_{activity_id}"
         await sio.emit(event, data, room=room)
-        print(f"Broadcasted {event} to room {room}")
+        socketio_logger.info(f"📢 Broadcasted {event} to room {room}")
     except Exception as e:
-        print(f"Error broadcasting to screen: {e}")
+        socketio_logger.error(f"❌ Error broadcasting to screen: {e}")
+        socketio_logger.error(traceback.format_exc())
 
 
 # 专用广播函数

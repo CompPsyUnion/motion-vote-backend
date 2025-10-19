@@ -14,6 +14,7 @@ from src.core.database import init_database
 from src.core.exceptions import AppException
 from src.core.redis import RedisClient
 from src.core.socketio_manager import sio
+from src.utils.logger import app_logger
 
 
 def create_app() -> FastAPI:
@@ -88,21 +89,33 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """应用启动和关闭时执行"""
+        app_logger.info("🚀 Application starting up...")
+
         # 初始化数据库
-        init_database()
+        try:
+            init_database()
+            app_logger.info("✅ Database initialized successfully")
+        except Exception as e:
+            app_logger.error(f"❌ Database initialization failed: {e}")
 
         # 初始化Redis连接（测试连接）
         try:
             redis_client = RedisClient.get_instance()
             redis_client.ping()
-            print("✅ Redis连接成功")
+            app_logger.info("✅ Redis connection successful")
         except Exception as e:
-            print(f"❌ Redis连接失败: {e}")
+            app_logger.error(f"❌ Redis connection failed: {e}")
+
+        app_logger.info(
+            f"✅ Application started successfully on {settings.app_name} v{settings.app_version}")
+        app_logger.info(f"📋 CORS Origins: {settings.cors_origins}")
 
         yield
 
         # 关闭Redis连接
+        app_logger.info("🛑 Application shutting down...")
         RedisClient.close()
+        app_logger.info("✅ Application shut down complete")
 
     app.router.lifespan_context = lifespan
 
@@ -112,9 +125,9 @@ def create_app() -> FastAPI:
 app = create_app()
 
 # 将 Socket.IO 包装到 ASGI 应用中
-# 使用 /live 路径而不是默认的 /socket.io
+# 使用默认的 socket.io 路径（注意：不带前导斜杠）
 socket_app = socketio.ASGIApp(
     sio,
     other_asgi_app=app,
-    socketio_path='/live'
+    socketio_path='socket.io'
 )

@@ -535,15 +535,23 @@ class ActivityService:
         ).first()
 
         if not collaborator:
+            print(
+                f"No collaborator found for activity {activity_id} and user {user_id}")
             raise HTTPException(status_code=403, detail="Permission denied")
 
         # 检查具体权限
+        print(
+            f"Collaborator permissions: {collaborator.permissions}, type: {type(collaborator.permissions)}")
+        print(f"Required permission: {required_permission}")
+
         if required_permission == "view":
             # view权限所有协作者都有
             return activity
         elif required_permission in ["edit", "control"]:
             # 检查是否有相应权限
             if required_permission not in collaborator.permissions:
+                print(
+                    f"Permission '{required_permission}' not found in {collaborator.permissions}")
                 raise HTTPException(
                     status_code=403,
                     detail="Insufficient permissions"

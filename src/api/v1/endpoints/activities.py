@@ -367,31 +367,31 @@ async def batch_import_participants(
     current_user: User = Depends(get_current_user)
 ):
     """通过Excel或CSV文件批量导入参与者
-    
+
     支持的文件格式：
     - Excel: .xlsx, .xls
     - CSV: .csv (支持UTF-8、GBK等编码)
-    
+
     支持的文件布局：
     1. **导入模板格式**（简化）：
        - 列：姓名、手机号、备注
        - 适合从零开始创建参与者名单
-    
+
     2. **导出文件格式**（完整）：
        - 列：编号、姓名、手机号、备注、是否入场、入场时间、创建时间
        - 支持直接编辑导出的文件并重新导入
        - 导入时会自动忽略编号、入场状态等字段，重新生成
-    
+
     智能列识别：
     - 系统会自动识别标题行中的"姓名"、"手机号"、"备注"列
     - 支持中英文列名
     - 你可以直接使用导出的文件，在末尾添加新参与者后重新导入
-    
+
     文件格式要求：
     - 第一行必须是标题行
     - 姓名列必填，其他列可选
     - CSV文件建议使用UTF-8编码保存
-    
+
     示例 - 简化格式：
     ```
     姓名,手机号,备注
@@ -399,7 +399,7 @@ async def batch_import_participants(
     李四,13900139000,
     王五,,普通参与者
     ```
-    
+
     示例 - 完整格式（导出文件）：
     ```
     编号,姓名,手机号,备注,是否入场,入场时间,创建时间
@@ -477,9 +477,15 @@ async def set_current_debate(
     """切换活动的当前辩题"""
     # 检查权限
     activity_service = ActivityService(db)
-    activity_service.check_activity_permission(
-        activity_id, str(current_user.id), "control"
-    )
+    try:
+        activity_service.check_activity_permission(
+            activity_id, str(current_user.id), "control"
+        )
+    except Exception as e:
+        print(f"Permission check failed: {e}")
+        print(f"Activity ID: {activity_id}")
+        print(f"User ID: {current_user.id}, Type: {type(current_user.id)}")
+        raise
 
     # 设置当前辩题
     debate_service = DebateService(db)
@@ -490,4 +496,3 @@ async def set_current_debate(
         "success": True,
         "message": "当前辩题切换成功"
     }
-

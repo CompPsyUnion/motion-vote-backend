@@ -23,7 +23,7 @@ from src.schemas.activity import (ActivityCreate, ActivityDetail,
                                   ActivityDetailStatistics, ActivityResponse,
                                   ActivityStatus, ActivityUpdate,
                                   CollaboratorInvite, CollaboratorPermission,
-                                  CollaboratorResponse, CollaboratorStatus,
+                                  CollaboratorResponse,
                                   CollaboratorUpdate, PaginatedActivities)
 from src.schemas.debate import DebateResponse
 
@@ -65,8 +65,7 @@ class ActivityService:
             elif role and role.lower() == "collaborator":
                 # 获取用户作为协作者的活动ID
                 collaborator_activity_ids = self.db.query(Collaborator.activity_id).filter(
-                    Collaborator.user_id == user_id,
-                    Collaborator.status == CollaboratorStatus.accepted
+                    Collaborator.user_id == user_id
                 ).all()
                 activity_ids = [str(c.activity_id)
                                 for c in collaborator_activity_ids]
@@ -81,8 +80,7 @@ class ActivityService:
 
                 # 获取协作的活动ID
                 collaborator_activity_ids = self.db.query(Collaborator.activity_id).filter(
-                    Collaborator.user_id == user_id,
-                    Collaborator.status == CollaboratorStatus.accepted
+                    Collaborator.user_id == user_id
                 ).all()
 
                 if collaborator_activity_ids:
@@ -93,7 +91,8 @@ class ActivityService:
 
                     # 合并两个查询结果 - 使用Python集合去重
                     owned_ids = {str(a.id) for a in owned_activities.all()}
-                    collab_ids = {str(a.id) for a in collaborated_activities.all()}
+                    collab_ids = {str(a.id)
+                                  for a in collaborated_activities.all()}
                     all_activity_ids = list(owned_ids | collab_ids)
 
                     if all_activity_ids:
@@ -445,8 +444,7 @@ class ActivityService:
         """获取用户在活动中的协作关系"""
         return self.db.query(Collaborator).filter(
             Collaborator.activity_id == activity_id,
-            Collaborator.user_id == user_id,
-            Collaborator.status == CollaboratorStatus.accepted
+            Collaborator.user_id == user_id
         ).first()
 
     def _get_activity_statistics(self, activity_id: str) -> ActivityDetailStatistics:
@@ -493,9 +491,7 @@ class ActivityService:
                 "avatar": getattr(collaborator.user, 'avatar', None)
             },
             "permissions": collaborator.permissions,
-            "status": collaborator.status,
-            "invited_at": collaborator.invited_at,
-            "accepted_at": collaborator.accepted_at
+            "invited_at": collaborator.invited_at
         }
 
         return CollaboratorResponse.model_validate(collaborator_dict)

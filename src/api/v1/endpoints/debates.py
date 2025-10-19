@@ -8,7 +8,6 @@ from src.models.activity import Activity, Collaborator
 from src.models.debate import Debate
 from src.models.user import User
 from src.models.vote import Vote
-from src.schemas.activity import CollaboratorStatus
 from src.schemas.debate import (CurrentDebateUpdate, DebateCreate,
                                 DebateDetailResponse, DebateReorder,
                                 DebateResponse, DebateStatusUpdate,
@@ -37,8 +36,7 @@ def check_activity_permission(
     # 检查协作者权限
     collaborator = db.query(Collaborator).filter(
         Collaborator.activity_id == activity_id,
-        Collaborator.user_id == user_id,
-        Collaborator.status == CollaboratorStatus.accepted
+        Collaborator.user_id == user_id
     ).first()
 
     if not collaborator:

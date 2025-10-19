@@ -6,7 +6,7 @@ from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from src.core.database import Base
-from src.schemas.activity import (ActivityStatus, CollaboratorStatus)
+from src.schemas.activity import ActivityStatus
 
 
 class Activity(Base):
@@ -54,8 +54,6 @@ class Collaborator(Base):
     id = Column(String(36), primary_key=True,
                 default=lambda: str(uuid.uuid4()))
     permissions = Column(JSON, nullable=False)
-    status = Column(SQLEnum(CollaboratorStatus),
-                    default=CollaboratorStatus.pending, nullable=False)
 
     # 外键
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
@@ -63,7 +61,6 @@ class Collaborator(Base):
         "activities.id"), nullable=False)
 
     invited_at = Column(DateTime(timezone=True), server_default=func.now())
-    accepted_at = Column(DateTime(timezone=True), nullable=True)
 
     # 关系
     user = relationship("User", back_populates="collaborations")

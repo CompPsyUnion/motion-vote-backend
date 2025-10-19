@@ -24,7 +24,6 @@ from src.core.socketio_manager import broadcast_statistics_update
 from src.models.activity import Activity, Collaborator
 from src.models.debate import Debate
 from src.models.vote import Participant, Vote
-from src.schemas.activity import CollaboratorStatus
 from src.schemas.statistics import (ActivityReport, ActivitySummary,
                                     ActivityType, DashboardData, DebateResult,
                                     DebateStats, ExportType, RealTimeStats,
@@ -73,11 +72,10 @@ class StatisticsService:
 
         # 检查是否是活动拥有者或协作者
         if str(activity.owner_id) != str(user_id):
-            # 检查是否是已接受的协作者
+            # 检查是否是协作者
             collaborator = self.db.query(Collaborator).filter(
                 Collaborator.activity_id == activity_id,
-                Collaborator.user_id == user_id,
-                Collaborator.status == CollaboratorStatus.accepted
+                Collaborator.user_id == user_id
             ).first()
 
             if not collaborator:

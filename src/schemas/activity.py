@@ -115,12 +115,6 @@ class CollaboratorPermission(str, Enum):
     control = "control"
 
 
-class CollaboratorStatus(str, Enum):
-    pending = "pending"
-    accepted = "accepted"
-    declined = "declined"
-
-
 class CollaboratorInvite(BaseModel):
     email: str = Field(..., description="被邀请用户邮箱")
     permissions: List[CollaboratorPermission] = Field(..., description="权限列表")
@@ -142,12 +136,11 @@ class UserInfo(BaseModel):
 
 
 class CollaboratorResponse(BaseModel):
-    id: str = Field(..., description="协作者ID")
-    user: UserInfo = Field(..., description="用户信息")
-    permissions: List[CollaboratorPermission] = Field(..., description="权限列表")
-    status: CollaboratorStatus = Field(..., description="邀请状态")
-    invited_at: datetime = Field(..., description="邀请时间")
-    accepted_at: Optional[datetime] = Field(None, description="接受时间")
+    id: str = Field(..., description="Collaborator ID")
+    user: UserInfo = Field(..., description="User information")
+    permissions: List[CollaboratorPermission] = Field(
+        ..., description="Permission list")
+    invited_at: datetime = Field(..., description="Invited time")
 
     class Config:
         from_attributes = True

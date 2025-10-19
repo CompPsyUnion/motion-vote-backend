@@ -7,12 +7,19 @@ from typing import Any, Dict, Optional
 
 import socketio
 
+from src.config import settings
+
 # 创建 Socket.IO 服务器实例
+# 由于前端没有发送凭证，我们可以使用 '*' 作为允许的源
+# 如果未来需要身份验证，需要改为明确的源列表并设置 cors_credentials=True
+print(f"Settings CORS origins: {settings.cors_origins}")
+
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*',  # 生产环境中应该设置具体的域名
+    cors_allowed_origins='*',  # 允许所有源（因为不使用凭证）
+    cors_credentials=False,     # 不需要凭证，可以使用通配符
     logger=True,
-    engineio_logger=True
+    engineio_logger=True,
 )
 
 

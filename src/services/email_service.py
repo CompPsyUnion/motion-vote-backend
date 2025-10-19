@@ -107,7 +107,7 @@ class EmailService:
                         "recipient_email": email,
                         "subject": subject,
                         "body": body,
-                        "body_type": "plain"
+                        "body_type": "html"  # 修改为 html 以正确渲染邮件内容
                     },
                     timeout=30.0
                 )

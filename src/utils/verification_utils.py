@@ -7,10 +7,10 @@ from typing import Any, Dict, Optional, Union
 
 from src.core.exceptions import BusinessError, ValidationError
 from src.core.redis import get_redis
-from src.services.email_service import EmailService
+from src.utils.email_utils import EmailService
 
 
-class VerificationCodeService:
+class VerificationCodeUtils:
     """基于Redis的邮箱验证码服务"""
 
     def __init__(self):

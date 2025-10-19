@@ -6,13 +6,13 @@ from src.core.redis import get_redis
 from src.models.user import User
 from src.schemas.user import (ForgotPasswordRequest, LoginRequest,
                               RegisterRequest, UserResponse, UserRole)
-from src.services.verification_service import VerificationCodeService
+from src.utils.verification_utils import VerificationCodeUtils
 
 
 class AuthService:
     def __init__(self, db: Session):
         self.db = db
-        self.verification_service = VerificationCodeService()
+        self.verification_service = VerificationCodeUtils()
         self.redis = get_redis()
 
     async def register(self, user_data: RegisterRequest) -> dict:

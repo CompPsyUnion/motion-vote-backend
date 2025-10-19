@@ -11,7 +11,7 @@ from src.schemas.email_verification import (EmailVerificationResponse,
 from src.schemas.user import (ForgotPasswordRequest, LoginRequest,
                               RegisterRequest)
 from src.services.auth_service import AuthService
-from src.services.verification_service import VerificationCodeService
+from src.utils.verification_utils import VerificationCodeUtils
 
 router = APIRouter()
 security = HTTPBearer()
@@ -20,7 +20,7 @@ security = HTTPBearer()
 @router.get("/getcode", response_model=EmailVerificationResponse)
 async def send_verification_code(email: str = Query(..., description="Email address")):
     """Send verification code to email"""
-    verification_service = VerificationCodeService()
+    verification_service = VerificationCodeUtils()
     result = await verification_service.send_verification_code(email, "register")
     return EmailVerificationResponse(
         success=True,

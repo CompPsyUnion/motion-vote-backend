@@ -7,7 +7,7 @@ from src.core.database import get_db
 from src.models.user import User
 from src.schemas.base import ApiResponse, PaginatedResponse
 from src.schemas.user import UserResponse, UserRole, UserUpdate
-from src.services.user_service import UserService
+from src.services.users_service import UserService
 
 router = APIRouter()
 

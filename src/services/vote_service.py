@@ -18,7 +18,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from src.core.database import SessionLocal
 from src.core.redis import get_redis
-from src.core.websocket import manager
 from src.models.activity import Activity
 from src.models.debate import Debate
 from src.models.vote import Participant, Vote, VoteHistory
@@ -360,37 +359,6 @@ class VoteService:
 
         # 执行所有Redis操作
         pipe.execute()
-
-        # 6. 广播WebSocket更新和统计缓存更新
-        try:
-            # 导入统计服务（延迟导入避免循环依赖）
-            from src.services.statistics_service import get_statistics_service
-
-            # 获取投票结果用于广播
-            vote_results = self.get_debate_results(debate_id)
-
-            # 广播投票更新（已废弃，由 statistics_update 替代）
-            asyncio.create_task(
-                manager.broadcast_vote_update(
-                    activity_id,
-                    debate_id,
-                    {
-                        "vote_results": vote_results.__dict__,
-                        "participant_id": participant_id,
-                        "position": position.value,
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    }
-                )
-            )
-
-            # 更新统计缓存并触发广播（1秒防抖）
-            stats_service = get_statistics_service(self.db)
-            asyncio.create_task(
-                stats_service.update_statistics_cache(activity_id, debate_id)
-            )
-
-        except Exception as e:
-            print(f"WebSocket广播或统计更新失败: {e}")
 
         return {
             "vote_id": vote_id,

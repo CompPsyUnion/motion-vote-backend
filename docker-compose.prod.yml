@@ -63,6 +63,7 @@ services:
       - DATABASE_URL=postgresql://postgres:password@motion-vote-db:5432/motionvote
       - REDIS_URL=redis://motion-vote-redis:6379/0
       - SECRET_KEY=your-secret-key-change-in-production
+      - CORS_ORIGINS=["*"]
     depends_on:
       motion-vote-db:
         condition: service_healthy
@@ -72,7 +73,7 @@ services:
       # 挂载源码目录实现热重载
       - ./src:/app/src
       - ./requirements.txt:/app/requirements.txt
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.main:socket_app --host 0.0.0.0 --port 8000 --reload
 
 volumes:
   postgres_data:

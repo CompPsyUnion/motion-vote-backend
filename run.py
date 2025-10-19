@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 import uvicorn
-from src.main import app
+from src.main import socket_app
 
 if __name__ == "__main__":
     uvicorn.run(
-        "src.main:app",
+        "src.main:socket_app",
         host="0.0.0.0",
         port=8000,
         reload=True,

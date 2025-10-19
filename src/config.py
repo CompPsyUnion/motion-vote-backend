@@ -32,8 +32,7 @@ class Settings(BaseSettings):
     app_name: str = "Motion Vote API"
     app_version: str = "1.0.0"
     debug: bool = True
-    cors_origins: List[str] = [
-        "http://localhost:3000", "http://localhost:5173"]
+    cors_origins: List[str] = ["*"]  # 允许所有源访问
 
     # File Upload
     upload_dir: str = "uploads"

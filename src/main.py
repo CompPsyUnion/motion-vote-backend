@@ -112,8 +112,9 @@ def create_app() -> FastAPI:
 app = create_app()
 
 # 将 Socket.IO 包装到 ASGI 应用中
+# 使用 /live 路径而不是默认的 /socket.io
 socket_app = socketio.ASGIApp(
     sio,
     other_asgi_app=app,
-    socketio_path='/socket.io'
+    socketio_path='/live'
 )

@@ -186,9 +186,12 @@ class StatisticsService:
                 current_debate = {
                     "id": str(debate.id),
                     "title": str(debate.title),
-                    "description": str(debate.description) if debate.description else None,
+                    "proDescription": str(debate.pro_description) if debate.pro_description is not None else None,
+                    "conDescription": str(debate.con_description) if debate.con_description is not None else None,
+                    "background": str(debate.background) if debate.background is not None else None,
                     "status": str(debate.status.value) if hasattr(debate.status, 'value') else str(debate.status),
-                    "order": debate.order
+                    "order": debate.order,
+                    "activityId": str(debate.activity_id)
                 }
 
                 # 获取当前辩题的投票统计

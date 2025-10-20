@@ -360,6 +360,9 @@ class VoteService:
         # 执行所有Redis操作
         pipe.execute()
 
+        # 6. 触发统计更新和 WebSocket 广播（异步，不阻塞响应）
+        asyncio.create_task(self._trigger_statistics_update(activity_id, debate_id))
+
         return {
             "vote_id": vote_id,
             "remaining_changes": remaining_changes
@@ -666,3 +669,19 @@ class VoteService:
             import traceback
             traceback.print_exc()
             db.rollback()
+
+    async def _trigger_statistics_update(self, activity_id: str, debate_id: str):
+        """触发统计数据更新和 WebSocket 广播（带防抖）"""
+        try:
+            from src.services.statistics_service import get_statistics_service
+            
+            # 创建新的数据库会话用于异步任务
+            db = SessionLocal()
+            try:
+                stats_service = get_statistics_service(db)
+                # 这个方法已经包含防抖逻辑（1秒内最多广播一次）
+                await stats_service.update_statistics_cache(activity_id, debate_id)
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[ERROR] 触发统计更新失败: {e}")

@@ -217,3 +217,4 @@ logs/
 *.log
 
 docker-compose.yaml
+webhook.sh

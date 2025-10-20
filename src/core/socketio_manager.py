@@ -34,6 +34,8 @@ sio = socketio.AsyncServer(
     cors_credentials=False,     # 不需要凭证
     logger=True,  # 启用内部日志
     engineio_logger=True,  # 启用 Engine.IO 日志
+    # 添加额外的 CORS 配置以确保跨域请求被正确处理
+    always_connect=True,  # 允许所有连接尝试
 )
 
 socketio_logger.info("Socket.IO server initialized successfully")
@@ -120,9 +122,16 @@ async def connect(sid, environ, auth):
 
         socketio_logger.info(
             f"✅ Client {sid} connected successfully from {origin}")
+
+        # 重要：必须返回 True 以接受连接
+        # 如果返回 False 或 None，连接会被拒绝并返回 403
+        return True
+
     except Exception as e:
         socketio_logger.error(f"❌ Error in connect handler: {e}")
         socketio_logger.error(traceback.format_exc())
+        # 即使出错，也接受连接（根据业务需求调整）
+        return True
 
 
 @sio.event

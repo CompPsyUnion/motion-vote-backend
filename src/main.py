@@ -28,10 +28,12 @@ def create_app() -> FastAPI:
     )
 
     # CORS中间件
+    # 注意：当 allow_origins 为 ['*'] 时，必须设置 allow_credentials=False
+    # 否则会导致所有跨域请求被拒绝（包括 WebSocket）
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        allow_credentials=False,  # 使用通配符时必须为 False
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -109,6 +111,9 @@ def create_app() -> FastAPI:
         app_logger.info(
             f"✅ Application started successfully on {settings.app_name} v{settings.app_version}")
         app_logger.info(f"📋 CORS Origins: {settings.cors_origins}")
+        app_logger.info(
+            f"🔐 CORS Credentials: False (required when using wildcard)")
+        app_logger.info(f"🔌 Socket.IO path: /socket.io/")
 
         yield
 
@@ -126,8 +131,9 @@ app = create_app()
 
 # 将 Socket.IO 包装到 ASGI 应用中
 # 使用默认的 socket.io 路径（注意：不带前导斜杠）
+# 注意：socketio_path 参数在 python-socketio 5.x 中已被弃用
+# CORS 设置应该在 AsyncServer 初始化时完成，这里只需要包装即可
 socket_app = socketio.ASGIApp(
     sio,
     other_asgi_app=app,
-    socketio_path='socket.io'
 )

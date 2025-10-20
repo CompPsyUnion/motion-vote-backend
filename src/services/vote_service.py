@@ -263,14 +263,14 @@ class VoteService:
         if debate_activity_id != activity_id:
             raise HTTPException(status_code=403, detail="无权限为此辩题投票")
 
-        allowed_statuses = [DebateStatus.ongoing, DebateStatus.final_vote]
+        allowed_statuses = [DebateStatus.ongoing.value, DebateStatus.final_vote.value]
         if debate_status not in allowed_statuses:
             raise HTTPException(status_code=400, detail="辩题当前不允许投票")
 
         # 3. 获取投票配置
         vote_config = self._get_vote_config(activity_id)
         max_vote_changes = vote_config['max_vote_changes']
-        allow_vote_change = vote_config['allow_vote_change']
+        allow_vote_change = bool(vote_config['allow_vote_change'])
 
         # 4. 从Redis获取现有投票
         vote_key = self._vote_key(debate_id, participant_id)

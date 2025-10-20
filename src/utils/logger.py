@@ -89,8 +89,6 @@ def setup_logger(
 app_logger = setup_logger('app', level=logging.INFO)
 websocket_logger = setup_logger(
     'websocket', level=logging.DEBUG, log_file='logs/websocket.log')
-socketio_logger = setup_logger(
-    'socketio', level=logging.DEBUG, log_file='logs/socketio.log')
 api_logger = setup_logger('api', level=logging.INFO)
 db_logger = setup_logger('database', level=logging.WARNING)
 

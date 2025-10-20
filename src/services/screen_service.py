@@ -10,9 +10,9 @@ from typing import Any, Dict
 
 from sqlalchemy.orm import Session
 
-from src.core.socketio_manager import (broadcast_debate_change,
-                                       broadcast_debate_status,
-                                       screen_manager)
+from src.core.websocket_manager import (broadcast_debate_change,
+                                        broadcast_debate_status,
+                                        screen_manager)
 from src.services.statistics_service import get_statistics_service
 
 

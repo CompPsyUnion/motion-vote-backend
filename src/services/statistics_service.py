@@ -20,7 +20,7 @@ from sqlalchemy import and_, desc, func
 from sqlalchemy.orm import Session
 
 from src.core.redis import get_redis
-from src.core.socketio_manager import broadcast_statistics_update
+from src.core.websocket_manager import broadcast_statistics_update
 from src.models.activity import Activity, Collaborator
 from src.models.debate import Debate
 from src.models.vote import Participant, Vote

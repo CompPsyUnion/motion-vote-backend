@@ -6,14 +6,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-import socketio
 
 from src.api.v1.router import api_router
 from src.config import settings
 from src.core.database import init_database
 from src.core.exceptions import AppException
 from src.core.redis import RedisClient
-from src.core.socketio_manager import sio
 from src.utils.logger import app_logger
 
 
@@ -113,7 +111,7 @@ def create_app() -> FastAPI:
         app_logger.info(f"📋 CORS Origins: {settings.cors_origins}")
         app_logger.info(
             f"🔐 CORS Credentials: False (required when using wildcard)")
-        app_logger.info(f"🔌 Socket.IO path: /socket.io/")
+        app_logger.info(f"🔌 WebSocket endpoint: /api/ws/screen/")
 
         yield
 
@@ -128,12 +126,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
-# 将 Socket.IO 包装到 ASGI 应用中
-# 使用默认的 socket.io 路径（注意：不带前导斜杠）
-# 注意：socketio_path 参数在 python-socketio 5.x 中已被弃用
-# CORS 设置应该在 AsyncServer 初始化时完成，这里只需要包装即可
-socket_app = socketio.ASGIApp(
-    sio,
-    other_asgi_app=app,
-)

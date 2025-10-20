@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from src.api.v1.endpoints import (activities, auth, debates, participants,
-                                  screen, site_info, statistics, users, votes)
+                                  screen, site_info, statistics, users, votes,
+                                  websocket_screen)
 
 api_router = APIRouter()
 
@@ -31,6 +32,10 @@ api_router.include_router(
 # 大屏展示路由
 api_router.include_router(
     screen.router, prefix="/screen", tags=["screen"])
+
+# WebSocket 路由
+api_router.include_router(
+    websocket_screen.router, prefix="/ws/screen", tags=["websocket"])
 
 # 数据统计路由
 api_router.include_router(

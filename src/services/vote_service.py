@@ -361,7 +361,8 @@ class VoteService:
         pipe.execute()
 
         # 6. 触发统计更新和 WebSocket 广播（异步，不阻塞响应）
-        asyncio.create_task(self._trigger_statistics_update(activity_id, debate_id))
+        asyncio.create_task(
+            self._trigger_statistics_update(activity_id, debate_id))
 
         return {
             "vote_id": vote_id,
@@ -674,7 +675,7 @@ class VoteService:
         """触发统计数据更新和 WebSocket 广播（带防抖）"""
         try:
             from src.services.statistics_service import get_statistics_service
-            
+
             # 创建新的数据库会话用于异步任务
             db = SessionLocal()
             try:

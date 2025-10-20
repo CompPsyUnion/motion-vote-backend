@@ -251,6 +251,7 @@ class DebateService:
             status_data: 状态数据
         """
         debate = self.get_debate_by_id(debate_id)
+        activity_id = str(debate.activity_id)
 
         # 更新状态
         setattr(debate, 'status', status_data.status)
@@ -260,6 +261,11 @@ class DebateService:
         from src.services.vote_service import VoteService
         service = VoteService(self.db)
         service.invalidate_debate_cache(debate_id)
+
+        # 触发统计更新和 WebSocket 广播（异步）
+        import asyncio
+        asyncio.create_task(
+            self._trigger_statistics_update_after_status_change(activity_id, debate_id))
 
     def reorder_debates(self, reorder_data: DebateReorder) -> None:
         """调整辩题顺序
@@ -506,3 +512,25 @@ class DebateService:
         ).update({"current_debate_id": debate_id})
 
         self.db.commit()
+
+        # 触发统计更新和 WebSocket 广播（异步）
+        import asyncio
+        asyncio.create_task(
+            self._trigger_statistics_update_after_status_change(activity_id, debate_id))
+
+    async def _trigger_statistics_update_after_status_change(self, activity_id: str, debate_id: str):
+        """辩题状态更新后触发统计更新和 WebSocket 广播"""
+        try:
+            from src.services.statistics_service import get_statistics_service
+            from src.core.database import SessionLocal
+
+            # 创建新的数据库会话用于异步任务
+            db = SessionLocal()
+            try:
+                stats_service = get_statistics_service(db)
+                # 更新统计缓存并广播（包含防抖逻辑）
+                await stats_service.update_statistics_cache(activity_id, debate_id)
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[ERROR] 触发状态更新后的统计更新失败: {e}")

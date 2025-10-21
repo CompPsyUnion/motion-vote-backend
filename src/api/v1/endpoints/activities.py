@@ -149,7 +149,7 @@ async def get_collaborators(
 ):
     """获取活动的协作者列表"""
     service = ActivityService(db)
-    return service.get_collaborators(activity_id, str(current_user.id))
+    return service.get_collaborators(activity_id, current_user)
 
 
 @router.post("/{activity_id}/collaborators", response_model=ApiResponse, status_code=201)
@@ -161,7 +161,7 @@ async def invite_collaborator(
 ):
     """邀请用户成为活动协作者"""
     service = ActivityService(db)
-    service.invite_collaborator(activity_id, invite_data, str(current_user.id))
+    service.invite_collaborator(activity_id, invite_data, current_user)
     return ApiResponse(
         message="Collaborator invited successfully"
     )
@@ -178,7 +178,7 @@ async def update_collaborator_permissions(
     """更新协作者的权限设置"""
     service = ActivityService(db)
     service.update_collaborator_permissions(
-        activity_id, collaborator_id, update_data, str(current_user.id)
+        activity_id, collaborator_id, update_data, current_user
     )
     return ApiResponse(
         message="Collaborator permissions updated successfully"
@@ -195,7 +195,7 @@ async def remove_collaborator(
     """从活动中移除协作者"""
     service = ActivityService(db)
     service.remove_collaborator(
-        activity_id, collaborator_id, str(current_user.id))
+        activity_id, collaborator_id, current_user)
     return ApiResponse(
         message="Collaborator removed successfully"
     )

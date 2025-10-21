@@ -296,19 +296,21 @@ class ActivityService:
 
         return {"success": True, "message": "Activity deleted successfully", "timestamp": datetime.now()}
 
-    def get_collaborators(self, activity_id: str, user_id: str) -> List[CollaboratorResponse]:
+    def get_collaborators(self, activity_id: str, user: User) -> List[CollaboratorResponse]:
         """获取协作者列表"""
         activity = self.db.query(Activity).filter(
             Activity.id == activity_id).first()
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-        # 检查权限：所有者或协作者
-        if str(activity.owner_id) != user_id:
-            collaborator = self._get_user_collaboration(activity_id, user_id)
-            if not collaborator:
-                raise HTTPException(
-                    status_code=403, detail="Permission denied")
+        # 检查权限：所有者、协作者或管理员
+        if str(user.role) != "UserRole.admin":
+            if str(activity.owner_id) != str(user.id):
+                collaborator = self._get_user_collaboration(
+                    activity_id, str(user.id))
+                if not collaborator:
+                    raise HTTPException(
+                        status_code=403, detail="Permission denied")
 
         collaborators = self.db.query(Collaborator)\
             .options(selectinload(Collaborator.user))\
@@ -317,28 +319,29 @@ class ActivityService:
 
         return [self._build_collaborator_response(c) for c in collaborators]
 
-    def invite_collaborator(self, activity_id: str, invite_data: CollaboratorInvite, user_id: str) -> CollaboratorResponse:
+    def invite_collaborator(self, activity_id: str, invite_data: CollaboratorInvite, user: User) -> CollaboratorResponse:
         """邀请协作者"""
         activity = self.db.query(Activity).filter(
             Activity.id == activity_id).first()
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-        # 只有所有者可以邀请协作者
-        if str(activity.owner_id) != user_id:
-            raise HTTPException(
-                status_code=403, detail="Only owner can invite collaborators")
+        # 只有所有者或管理员可以邀请协作者
+        if str(user.role) != "UserRole.admin":
+            if str(activity.owner_id) != str(user.id):
+                raise HTTPException(
+                    status_code=403, detail="Only owner or admin can invite collaborators")
 
         # 检查用户是否存在
-        user = self.db.query(User).filter(
+        invitee = self.db.query(User).filter(
             User.email == invite_data.email).first()
-        if not user:
+        if not invitee:
             raise HTTPException(status_code=404, detail="User not found")
 
         # 检查是否已经是协作者
         existing = self.db.query(Collaborator).filter(
             Collaborator.activity_id == activity_id,
-            Collaborator.user_id == user.id
+            Collaborator.user_id == invitee.id
         ).first()
         if existing:
             raise HTTPException(
@@ -346,7 +349,7 @@ class ActivityService:
 
         collaborator = Collaborator(
             id=str(uuid4()),
-            user_id=user.id,
+            user_id=invitee.id,
             activity_id=activity_id,
             permissions=invite_data.permissions
         )
@@ -368,7 +371,7 @@ class ActivityService:
         activity_id: str,
         collaborator_id: str,
         update_data: CollaboratorUpdate,
-        user_id: str
+        user: User
     ) -> CollaboratorResponse:
         """更新协作者权限"""
         activity = self.db.query(Activity).filter(
@@ -376,10 +379,11 @@ class ActivityService:
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-        # 只有所有者可以更新权限
-        if str(activity.owner_id) != user_id:
-            raise HTTPException(
-                status_code=403, detail="Only owner can update collaborator permissions")
+        # 只有所有者或管理员可以更新权限
+        if str(user.role) != "UserRole.admin":
+            if str(activity.owner_id) != str(user.id):
+                raise HTTPException(
+                    status_code=403, detail="Only owner or admin can update collaborator permissions")
 
         collaborator = self.db.query(Collaborator)\
             .options(selectinload(Collaborator.user))\
@@ -399,17 +403,18 @@ class ActivityService:
 
         return self._build_collaborator_response(collaborator)
 
-    def remove_collaborator(self, activity_id: str, collaborator_id: str, user_id: str) -> dict:
+    def remove_collaborator(self, activity_id: str, collaborator_id: str, user: User) -> dict:
         """移除协作者"""
         activity = self.db.query(Activity).filter(
             Activity.id == activity_id).first()
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-        # 只有所有者可以移除协作者
-        if str(activity.owner_id) != user_id:
-            raise HTTPException(
-                status_code=403, detail="Only owner can remove collaborators")
+        # 只有所有者或管理员可以移除协作者
+        if str(user.role) != "UserRole.admin":
+            if str(activity.owner_id) != str(user.id):
+                raise HTTPException(
+                    status_code=403, detail="Only owner or admin can remove collaborators")
 
         collaborator = self.db.query(Collaborator).filter(
             Collaborator.id == collaborator_id,

@@ -23,11 +23,13 @@ from src.core.redis import get_redis
 from src.core.websocket_manager import broadcast_statistics_update
 from src.models.activity import Activity, Collaborator
 from src.models.debate import Debate
+from src.models.user import User
 from src.models.vote import Participant, Vote
 from src.schemas.statistics import (ActivityReport, ActivitySummary,
                                     ActivityType, DashboardData, DebateResult,
                                     DebateStats, ExportType, RealTimeStats,
                                     RecentActivity, TimelinePoint, VoteResults)
+from src.schemas.user import UserRole
 
 
 class StatisticsService:
@@ -63,26 +65,51 @@ class StatisticsService:
 
     # ============ 权限检查 ============
 
-    def _check_activity_permission(self, activity_id: str, user_id: str) -> Activity:
-        """检查用户对活动的权限"""
+    def _check_activity_permission(self, activity_id: str, user) -> Activity:
+        """检查用户对活动的权限（使用 User 对象）
+
+        Args:
+            activity_id: 活动ID
+            user: User 对象（包含 id 和 role）
+
+        Returns:
+            Activity: 活动对象
+        """
         activity = self.db.query(Activity).filter(
             Activity.id == activity_id).first()
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-        # 检查是否是活动拥有者或协作者
-        if str(activity.owner_id) != str(user_id):
-            # 检查是否是协作者
-            collaborator = self.db.query(Collaborator).filter(
-                Collaborator.activity_id == activity_id,
-                Collaborator.user_id == user_id
-            ).first()
+        # 支持传入 user 对象 或 user_id 字符串
+        user_id = None
+        user_obj = None
+        from src.models.user import User as UserModel
 
-            if not collaborator:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You don't have permission to access this activity"
-                )
+        if isinstance(user, UserModel):
+            user_obj = user
+            user_id = str(user.id)
+        else:
+            user_id = str(user)
+
+        # 如果传入了 user 对象并且是管理员，允许访问
+        if user_obj is not None and str(user_obj.role) == "UserRole.admin":
+            return activity
+
+        # 检查是否为所有者
+        if str(activity.owner_id) == user_id:
+            return activity
+
+        # 检查是否是协作者
+        collaborator = self.db.query(Collaborator).filter(
+            Collaborator.activity_id == activity_id,
+            Collaborator.user_id == user_id
+        ).first()
+
+        if not collaborator:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to access this activity"
+            )
 
         return activity
 
@@ -340,10 +367,10 @@ class StatisticsService:
 
     # ============ Dashboard 数据（兼容旧接口）============
 
-    def get_dashboard_data(self, activity_id: str, user_id: str) -> DashboardData:
+    def get_dashboard_data(self, activity_id: str, user: User) -> DashboardData:
         """获取实时数据看板"""
         # 检查权限
-        activity = self._check_activity_permission(activity_id, user_id)
+        activity = self._check_activity_permission(activity_id, user)
 
         # 获取实时统计数据
         real_time_stats = self._get_real_time_stats(activity_id)
@@ -636,10 +663,10 @@ class StatisticsService:
 
         return sorted(activities, key=lambda x: x.timestamp, reverse=True)[:limit]
 
-    def get_activity_report(self, activity_id: str, user_id: str) -> ActivityReport:
+    def get_activity_report(self, activity_id: str, user: User) -> ActivityReport:
         """获取活动报告"""
         # 检查权限
-        activity = self._check_activity_permission(activity_id, user_id)
+        activity = self._check_activity_permission(activity_id, user)
 
         # 获取活动摘要
         summary = self._get_activity_summary(activity_id)
@@ -768,10 +795,10 @@ class StatisticsService:
 
         return timeline
 
-    def export_data(self, activity_id: str, user_id: str, export_type: ExportType = ExportType.ALL) -> bytes:
+    def export_data(self, activity_id: str, user: User, export_type: ExportType = ExportType.ALL) -> bytes:
         """导出原始数据为CSV格式"""
         # 检查权限
-        self._check_activity_permission(activity_id, user_id)
+        self._check_activity_permission(activity_id, user)
 
         if export_type == ExportType.VOTES or export_type == ExportType.ALL:
             return self._export_votes_csv(activity_id)
@@ -881,10 +908,10 @@ class StatisticsService:
         # 简化实现：返回投票数据
         return self._export_votes_csv(activity_id)
 
-    def generate_pdf_report(self, activity_id: str, user_id: str) -> bytes:
+    def generate_pdf_report(self, activity_id: str, user: User) -> bytes:
         """生成PDF格式的活动报告"""
         # 获取报告数据
-        report = self.get_activity_report(activity_id, user_id)
+        report = self.get_activity_report(activity_id, user)
 
         # 创建PDF
         buffer = io.BytesIO()
@@ -967,10 +994,10 @@ class StatisticsService:
 
         return pdf_content
 
-    def generate_excel_report(self, activity_id: str, user_id: str) -> bytes:
+    def generate_excel_report(self, activity_id: str, user: User) -> bytes:
         """生成Excel格式的活动报告"""
         # 获取报告数据
-        report = self.get_activity_report(activity_id, user_id)
+        report = self.get_activity_report(activity_id, user)
 
         # 创建工作簿
         wb = Workbook()

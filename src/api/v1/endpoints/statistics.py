@@ -25,7 +25,7 @@ async def get_dashboard_data(
     service = StatisticsService(db)
     dashboard_data = service.get_dashboard_data(
         activity_id=activity_id,
-        user_id=str(current_user.id)
+        user=current_user
     )
 
     return {
@@ -52,7 +52,7 @@ async def get_activity_report(
     if format == "json":
         report_data = service.get_activity_report(
             activity_id=activity_id,
-            user_id=str(current_user.id)
+            user=current_user
         )
 
         return {
@@ -62,8 +62,7 @@ async def get_activity_report(
         }
     elif format == "pdf":
         # 生成PDF报告
-        user_id_str: str = getattr(current_user, 'id')
-        pdf_content = service.generate_pdf_report(activity_id, user_id_str)
+        pdf_content = service.generate_pdf_report(activity_id, current_user)
 
         return StreamingResponse(
             io.BytesIO(pdf_content),
@@ -74,8 +73,8 @@ async def get_activity_report(
         )
     elif format == "excel":
         # 生成Excel报告
-        user_id_str: str = getattr(current_user, 'id')
-        excel_content = service.generate_excel_report(activity_id, user_id_str)
+        excel_content = service.generate_excel_report(
+            activity_id, current_user)
 
         return StreamingResponse(
             io.BytesIO(excel_content),
@@ -106,7 +105,7 @@ async def export_data(
     service = StatisticsService(db)
     csv_data = service.export_data(
         activity_id=activity_id,
-        user_id=str(current_user.id),
+        user=current_user,
         export_type=type
     )
 

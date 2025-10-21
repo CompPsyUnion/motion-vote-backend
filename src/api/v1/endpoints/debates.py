@@ -52,7 +52,7 @@ async def update_debate(
     # 检查权限
     activity_service = ActivityService(db)
     activity_service.check_activity_permission(
-        str(debate.activity_id), str(current_user.id), "edit"
+        str(debate.activity_id), "edit", current_user
     )
 
     # 更新辩题
@@ -77,7 +77,7 @@ async def delete_debate(
     # 检查权限
     activity_service = ActivityService(db)
     activity_service.check_activity_permission(
-        str(debate.activity_id), str(current_user.id), "edit"
+        str(debate.activity_id), "edit", current_user
     )
 
     # 删除辩题
@@ -103,7 +103,7 @@ async def update_debate_status(
     # 检查权限
     activity_service = ActivityService(db)
     activity_service.check_activity_permission(
-        str(debate.activity_id), str(current_user.id), "control"
+        str(debate.activity_id), "control", current_user
     )
 
     # 更新状态
@@ -136,7 +136,7 @@ async def reorder_debates(
     # 检查权限
     activity_service = ActivityService(db)
     activity_service.check_activity_permission(
-        str(first_debate.activity_id), str(current_user.id), "edit"
+        str(first_debate.activity_id), "edit", current_user
     )
 
     # 批量更新顺序

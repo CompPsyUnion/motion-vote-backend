@@ -230,7 +230,7 @@ async def get_activity_debates(
     # 检查权限
     activity_service = ActivityService(db)
     activity_service.check_activity_permission(
-        activity_id, str(current_user.id), "view"
+        activity_id, "view", current_user
     )
 
     # 获取辩题列表
@@ -263,7 +263,7 @@ async def create_activity_debate(
     # 检查权限
     activity_service = ActivityService(db)
     activity_service.check_activity_permission(
-        activity_id, str(current_user.id), "edit"
+        activity_id, "edit", current_user
     )
 
     # 创建辩题
@@ -479,7 +479,7 @@ async def set_current_debate(
     activity_service = ActivityService(db)
     try:
         activity_service.check_activity_permission(
-            activity_id, str(current_user.id), "control"
+            activity_id, "control", current_user
         )
     except Exception as e:
         print(f"Permission check failed: {e}")

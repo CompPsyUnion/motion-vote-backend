@@ -9,22 +9,29 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 from src.models.activity import Activity, Collaborator
 from src.models.debate import Debate
+from src.models.user import User
 from src.models.vote import Participant, Vote
 from src.schemas.participant import (PaginatedParticipants,
                                      ParticipantBatchImportResult,
                                      ParticipantCreate, ParticipantResponse)
+from src.schemas.user import UserRole
 
 
 class ParticipantService:
     def __init__(self, db: Session):
         self.db = db
 
-    def _check_activity_permission(self, activity_id: str, user_id: str) -> Activity:
+    def _check_activity_permission(self, activity_id: str, user_id: str, user: Optional[User] = None) -> Activity:
         """检查用户对活动的权限"""
         activity = self.db.query(Activity).filter(
             Activity.id == activity_id).first()
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
+
+        # 如果提供了user对象，检查是否是管理员
+        if user is not None:
+            if str(user.role) == "UserRole.admin":
+                return activity
 
         # 检查是否是活动拥有者或协作者
         if str(activity.owner_id) != str(user_id):

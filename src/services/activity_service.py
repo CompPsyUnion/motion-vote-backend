@@ -26,6 +26,7 @@ from src.schemas.activity import (ActivityCreate, ActivityDetail,
                                   CollaboratorResponse, CollaboratorUpdate,
                                   PaginatedActivities)
 from src.schemas.debate import DebateResponse
+from src.schemas.user import UserRole
 
 
 class ActivityService:
@@ -501,8 +502,8 @@ class ActivityService:
     def check_activity_permission(
         self,
         activity_id: str,
-        user_id: str,
-        required_permission: str
+        required_permission: str,
+        user: User
     ) -> Activity:
         """检查活动权限并返回活动对象
 
@@ -510,6 +511,7 @@ class ActivityService:
             activity_id: 活动ID
             user_id: 用户ID
             required_permission: 所需权限 ("view", "edit", "control")
+            user: 用户对象（可选，用于检查admin权限）
 
         Returns:
             Activity对象
@@ -524,19 +526,23 @@ class ActivityService:
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
+        # 管理员有权限
+        if user is not None and str(user.role) == "UserRole.admin":
+            return activity
+
         # 检查是否为所有者
-        if str(activity.owner_id) == str(user_id):
+        if str(activity.owner_id) == str(user.id):
             return activity
 
         # 检查协作者权限
         collaborator = self.db.query(Collaborator).filter(
             Collaborator.activity_id == activity_id,
-            Collaborator.user_id == user_id
+            Collaborator.user_id == user.id
         ).first()
 
         if not collaborator:
             print(
-                f"No collaborator found for activity {activity_id} and user {user_id}")
+                f"No collaborator found for activity {activity_id} and user {user.id}")
             raise HTTPException(status_code=403, detail="Permission denied")
 
         # 检查具体权限

@@ -13,6 +13,7 @@ router = APIRouter()
 
 
 @router.get("/{participant_id}/link", response_model=dict)
+@router.get("/{participant_id}/link/", response_model=dict)
 async def generate_participant_link(
     participant_id: str,
     db: Session = Depends(get_db),
@@ -36,6 +37,7 @@ async def generate_participant_link(
 
 
 @router.get("/{participant_id}/qrcode")
+@router.get("/{participant_id}/qrcode/")
 async def generate_participant_qrcode(
     participant_id: str,
     db: Session = Depends(get_db),

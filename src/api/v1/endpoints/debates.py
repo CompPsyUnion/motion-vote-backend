@@ -23,6 +23,7 @@ router = APIRouter()
 
 
 @router.get("/{debate_id}")
+@router.get("/{debate_id}/")
 async def get_debate_detail(
     debate_id: str,
     db: Session = Depends(get_db)
@@ -39,6 +40,7 @@ async def get_debate_detail(
 
 
 @router.put("/{debate_id}")
+@router.put("/{debate_id}/")
 async def update_debate(
     debate_id: str,
     debate_data: DebateUpdate,
@@ -65,6 +67,7 @@ async def update_debate(
 
 
 @router.delete("/{debate_id}")
+@router.delete("/{debate_id}/")
 async def delete_debate(
     debate_id: str,
     db: Session = Depends(get_db),
@@ -90,6 +93,7 @@ async def delete_debate(
 
 
 @router.put("/{debate_id}/status")
+@router.put("/{debate_id}/status/")
 async def update_debate_status(
     debate_id: str,
     status_data: DebateStatusUpdate,
@@ -116,6 +120,7 @@ async def update_debate_status(
 
 
 @router.put("/reorder")
+@router.put("/reorder/")
 async def reorder_debates(
     reorder_data: DebateReorder,
     db: Session = Depends(get_db),

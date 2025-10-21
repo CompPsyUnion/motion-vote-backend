@@ -17,6 +17,7 @@ router = APIRouter()
 
 
 @router.post("/enter")
+@router.post("/enter/")
 async def participant_enter(
     enter_data: ParticipantEnter,
     db: Session = Depends(get_db)
@@ -37,6 +38,7 @@ async def participant_enter(
 
 
 @router.post("/debates/{debate_id}")
+@router.post("/debates/{debate_id}/")
 async def vote_for_debate(
     debate_id: str,
     vote_data: VoteRequest,
@@ -58,6 +60,7 @@ async def vote_for_debate(
 
 
 @router.get("/debates/{debate_id}")
+@router.get("/debates/{debate_id}/")
 async def get_vote_status(
     debate_id: str,
     session_token: str = Query(..., alias="sessionToken", description="会话令牌"),
@@ -78,6 +81,7 @@ async def get_vote_status(
 
 
 @router.get("/debates/{debate_id}/results")
+@router.get("/debates/{debate_id}/results/")
 async def get_debate_results(
     debate_id: str,
     db: Session = Depends(get_db)

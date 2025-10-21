@@ -21,6 +21,7 @@ router = APIRouter()
 
 
 @router.get("/{activity_id}/display", response_model=ApiResponse)
+@router.get("/{activity_id}/display/", response_model=ApiResponse)
 async def get_screen_display(
     activity_id: str,
     type: DisplayType = DisplayType.both_sides,
@@ -63,3 +64,5 @@ async def get_screen_display(
         return ApiResponse(success=True, data=statistics, message="获取成功")
 
     return ApiResponse(success=True, data=screen_data.model_dump(by_alias=True), message="获取成功")
+
+# TODO: /api/screen/{activityId}/control

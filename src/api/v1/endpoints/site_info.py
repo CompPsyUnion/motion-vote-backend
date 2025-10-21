@@ -8,6 +8,7 @@ router = APIRouter()
 
 
 @router.get("/info", response_model=SiteInfoResponse)
+@router.get("/info/", response_model=SiteInfoResponse)
 async def get_site_info(
     db: Session = Depends(get_db)
 ):
@@ -18,6 +19,7 @@ async def get_site_info(
 
 
 @router.post("/info", response_model=SiteInfoResponse)
+@router.post("/info/", response_model=SiteInfoResponse)
 async def update_site_info(
     site_data: SiteInfoUpdate,
     db: Session = Depends(get_db)

@@ -33,6 +33,7 @@ router = APIRouter()
 router = APIRouter()
 
 
+@router.get("", response_model=PaginatedActivities)
 @router.get("/", response_model=PaginatedActivities)
 async def get_activities(
     page: int = Query(default=1, ge=1, description="页码"),
@@ -91,6 +92,7 @@ async def get_activities(
     )
 
 
+@router.post("", response_model=ActivityResponse, status_code=201)
 @router.post("/", response_model=ActivityResponse, status_code=201)
 async def create_activity(
     activity_data: ActivityCreate,
@@ -103,6 +105,7 @@ async def create_activity(
 
 
 @router.get("/{activity_id}", response_model=ActivityDetail)
+@router.get("/{activity_id}/", response_model=ActivityDetail)
 async def get_activity_detail(
     activity_id: str,
     db: Session = Depends(get_db)
@@ -113,6 +116,7 @@ async def get_activity_detail(
 
 
 @router.put("/{activity_id}", response_model=ApiResponse)
+@router.put("/{activity_id}/", response_model=ApiResponse)
 async def update_activity(
     activity_id: str,
     activity_data: ActivityUpdate,
@@ -128,6 +132,7 @@ async def update_activity(
 
 
 @router.delete("/{activity_id}", response_model=ApiResponse)
+@router.delete("/{activity_id}/", response_model=ApiResponse)
 async def delete_activity(
     activity_id: str,
     db: Session = Depends(get_db),
@@ -142,6 +147,7 @@ async def delete_activity(
 
 
 @router.get("/{activity_id}/collaborators", response_model=List[CollaboratorResponse])
+@router.get("/{activity_id}/collaborators/", response_model=List[CollaboratorResponse])
 async def get_collaborators(
     activity_id: str,
     db: Session = Depends(get_db),
@@ -153,6 +159,7 @@ async def get_collaborators(
 
 
 @router.post("/{activity_id}/collaborators", response_model=ApiResponse, status_code=201)
+@router.post("/{activity_id}/collaborators/", response_model=ApiResponse, status_code=201)
 async def invite_collaborator(
     activity_id: str,
     invite_data: CollaboratorInvite,
@@ -168,6 +175,7 @@ async def invite_collaborator(
 
 
 @router.put("/{activity_id}/collaborators/{collaborator_id}", response_model=ApiResponse)
+@router.put("/{activity_id}/collaborators/{collaborator_id}/", response_model=ApiResponse)
 async def update_collaborator_permissions(
     activity_id: str,
     collaborator_id: str,
@@ -186,6 +194,7 @@ async def update_collaborator_permissions(
 
 
 @router.delete("/{activity_id}/collaborators/{collaborator_id}", response_model=ApiResponse)
+@router.delete("/{activity_id}/collaborators/{collaborator_id}/", response_model=ApiResponse)
 async def remove_collaborator(
     activity_id: str,
     collaborator_id: str,
@@ -204,6 +213,7 @@ async def remove_collaborator(
 # ==================== Debates 辩题管理 ====================
 
 @router.get("/{activity_id}/debates")
+@router.get("/{activity_id}/debates/")
 async def get_activity_debates(
     activity_id: str,
     search: Optional[str] = Query(
@@ -253,6 +263,7 @@ async def get_activity_debates(
 
 
 @router.post("/{activity_id}/debates", status_code=201)
+@router.post("/{activity_id}/debates/", status_code=201)
 async def create_activity_debate(
     activity_id: str,
     debate_data: DebateCreate,
@@ -279,6 +290,7 @@ async def create_activity_debate(
 
 # ==================== Participants 参与者管理 ====================
 @router.get("/{activity_id}/participants", response_model=PaginatedParticipants)
+@router.get("/{activity_id}/participants/", response_model=PaginatedParticipants)
 async def get_participants(
     activity_id: str,
     page: Union[int, str, None] = Query(default=1, description="页码"),
@@ -344,6 +356,7 @@ async def get_participants(
 
 
 @router.post("/{activity_id}/participants", response_model=ParticipantResponse, status_code=201)
+@router.post("/{activity_id}/participants/", response_model=ParticipantResponse, status_code=201)
 async def create_participant(
     activity_id: str,
     participant_data: ParticipantCreate,
@@ -360,6 +373,7 @@ async def create_participant(
 
 
 @router.post("/{activity_id}/participants/batch", response_model=ParticipantBatchImportResult)
+@router.post("/{activity_id}/participants/batch/", response_model=ParticipantBatchImportResult)
 async def batch_import_participants(
     activity_id: str,
     file: UploadFile = File(..., description="Excel或CSV文件"),
@@ -428,6 +442,7 @@ async def batch_import_participants(
 
 
 @router.get("/{activity_id}/participants/export")
+@router.get("/{activity_id}/participants/export/")
 async def export_participants(
     activity_id: str,
     db: Session = Depends(get_db),
@@ -451,6 +466,7 @@ async def export_participants(
 # ==================== Current Debate 当前辩题 ====================
 
 @router.get("/{activity_id}/current-debate", response_model=ApiResponse)
+@router.get("/{activity_id}/current-debate/", response_model=ApiResponse)
 async def get_current_debate(
     activity_id: str,
     db: Session = Depends(get_db)
@@ -468,6 +484,7 @@ async def get_current_debate(
 
 
 @router.put("/{activity_id}/current-debate")
+@router.put("/{activity_id}/current-debate/")
 async def set_current_debate(
     activity_id: str,
     current_debate_data: CurrentDebateUpdate,

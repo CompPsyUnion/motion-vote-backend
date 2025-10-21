@@ -11,6 +11,7 @@ router = APIRouter()
 
 
 @router.websocket("/{activity_id}")
+@router.websocket("/{activity_id}/")
 async def websocket_screen_endpoint(
     websocket: WebSocket,
     activity_id: str
@@ -103,6 +104,7 @@ async def websocket_screen_endpoint(
 
 
 @router.websocket("")
+@router.websocket("/")
 async def websocket_screen_endpoint_without_activity(websocket: WebSocket):
     """
     大屏 WebSocket 连接端点（不指定活动）

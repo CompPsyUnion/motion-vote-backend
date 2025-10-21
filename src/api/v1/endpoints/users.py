@@ -13,6 +13,7 @@ router = APIRouter()
 
 
 @router.get("/profile", response_model=UserResponse)
+@router.get("/profile/", response_model=UserResponse)
 async def get_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -36,6 +37,7 @@ async def get_profile(
 
 
 @router.put("/profile", response_model=ApiResponse)
+@router.put("/profile/", response_model=ApiResponse)
 async def update_profile(
     user_update: UserUpdate,
     id: Optional[str] = Query(None, description="要更新的用户ID（仅管理员可用）"),
@@ -71,6 +73,7 @@ async def update_profile(
 
 
 @router.get("", response_model=PaginatedResponse)
+@router.get("/", response_model=PaginatedResponse)
 async def get_users(
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),

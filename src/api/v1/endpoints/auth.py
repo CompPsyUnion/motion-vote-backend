@@ -18,6 +18,7 @@ security = HTTPBearer()
 
 
 @router.get("/getcode", response_model=EmailVerificationResponse)
+@router.get("/getcode/", response_model=EmailVerificationResponse)
 async def send_verification_code(email: str = Query(..., description="Email address")):
     """Send verification code to email"""
     verification_service = VerificationCodeUtils()
@@ -31,6 +32,7 @@ async def send_verification_code(email: str = Query(..., description="Email addr
 
 
 @router.post("/register", response_model=ApiResponse, status_code=HTTPStatus.CREATED)
+@router.post("/register/", response_model=ApiResponse, status_code=HTTPStatus.CREATED)
 async def register(user_data: RegisterRequest, db: Session = Depends(get_db)):
     """User registration"""
     auth_service = AuthService(db)
@@ -44,6 +46,7 @@ async def register(user_data: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=ApiResponse)
+@router.post("/login/", response_model=ApiResponse)
 async def login(user_data: LoginRequest, db: Session = Depends(get_db)):
     """User login"""
     auth_service = AuthService(db)
@@ -57,6 +60,7 @@ async def login(user_data: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=ApiResponse)
+@router.post("/refresh/", response_model=ApiResponse)
 async def refresh_token(token=Depends(security), db: Session = Depends(get_db)):
     """Refresh JWT Token"""
     auth_service = AuthService(db)
@@ -70,6 +74,7 @@ async def refresh_token(token=Depends(security), db: Session = Depends(get_db)):
 
 
 @router.post("/revoke", response_model=ApiResponse)
+@router.post("/revoke/", response_model=ApiResponse)
 async def revoke_token(token=Depends(security), db: Session = Depends(get_db)):
     """Revoke token (logout)"""
     auth_service = AuthService(db)
@@ -80,6 +85,7 @@ async def revoke_token(token=Depends(security), db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password", response_model=ApiResponse)
+@router.post("/forgot-password/", response_model=ApiResponse)
 async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """Reset password"""
     auth_service = AuthService(db)

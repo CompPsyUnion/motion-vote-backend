@@ -13,6 +13,7 @@ router = APIRouter()
 
 
 @router.get("/{activity_id}/dashboard", response_model=dict)
+@router.get("/{activity_id}/dashboard/", response_model=dict)
 async def get_dashboard_data(
     activity_id: str,
     db: Session = Depends(get_db),
@@ -36,6 +37,7 @@ async def get_dashboard_data(
 
 
 @router.get("/{activity_id}/report", response_model=dict)
+@router.get("/{activity_id}/report/", response_model=dict)
 async def get_activity_report(
     activity_id: str,
     format: str = Query("json", description="报告格式",
@@ -92,6 +94,7 @@ async def get_activity_report(
 
 
 @router.get("/{activity_id}/export")
+@router.get("/{activity_id}/export/")
 async def export_data(
     activity_id: str,
     type: ExportType = Query(ExportType.ALL, description="导出数据类型"),

@@ -100,8 +100,6 @@ class DebateResponse(DebateBase):
     updated_at: datetime = Field(..., alias="updatedAt", description="更新时间")
     stages: list[DebateStage] = Field(
         default_factory=list, description="辩论阶段列表")
-    current_stage: Optional[DebateStage] = Field(
-        None, alias="currentStage", description="当前阶段")
 
     @field_validator('stages', mode='before')
     @classmethod

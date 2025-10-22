@@ -23,7 +23,6 @@ class Debate(Base):
     estimated_duration = Column(Integer, nullable=True)
     order = Column(Integer, nullable=False, default=0)
     stages = Column(Text, nullable=True, comment="辩论阶段配置（JSON）")
-    current_stage = Column(Text, nullable=True, comment="当前阶段（JSON）")
 
     # 辩题时间跟踪
     started_at = Column(DateTime(timezone=True),

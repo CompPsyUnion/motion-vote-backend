@@ -41,7 +41,7 @@ class ScreenDisplayData(BaseModel):
     showData: bool = Field(
         default=True, description="是否显示投票数据", alias="show_data"
     )
-    VoteStats: Optional[VoteStats] = Field(
+    voteStats: Optional[VoteStats] = Field(
         None, description="投票结果", alias="vote_results"
     )
     timestamp: datetime = Field(

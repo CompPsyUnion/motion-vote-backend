@@ -9,7 +9,7 @@
 
 from datetime import datetime
 from math import ceil
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import asc, desc, func, or_
@@ -533,8 +533,8 @@ class DebateService:
     async def _trigger_statistics_update_after_status_change(self, activity_id: str, debate_id: str):
         """辩题状态更新后触发统计更新和 WebSocket 广播"""
         try:
-            from src.services.statistics_service import get_statistics_service
             from src.core.database import SessionLocal
+            from src.services.statistics_service import get_statistics_service
 
             # 创建新的数据库会话用于异步任务
             db = SessionLocal()

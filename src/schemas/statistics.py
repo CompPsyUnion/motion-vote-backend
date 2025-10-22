@@ -40,7 +40,7 @@ class RealTimeStats(BaseModel):
         populate_by_name = True
 
 
-class VoteResults(BaseModel):
+class VoteStats(BaseModel):
     """投票结果"""
     debate_id: str = Field(..., alias="debateId", description="辩题ID")
     total_votes: int = Field(default=0, alias="totalVotes", description="总投票数")
@@ -92,8 +92,8 @@ class DebateStats(BaseModel):
     """辩题统计数据"""
     debate_id: str = Field(..., alias="debateId", description="辩题ID")
     debate_title: str = Field(..., alias="debateTitle", description="辩题标题")
-    vote_results: VoteResults = Field(...,
-                                      alias="voteResults", description="投票结果")
+    vote_results: VoteStats = Field(...,
+                                    alias="VoteStats", description="投票结果")
     vote_rate: float = Field(..., alias="voteRate", description="投票率")
 
     class Config:
@@ -135,7 +135,7 @@ class DebateResult(BaseModel):
     debate_id: str = Field(..., alias="debateId", description="辩题ID")
     debate_title: str = Field(..., alias="debateTitle", description="辩题标题")
     debate_order: int = Field(..., alias="debateOrder", description="辩题顺序")
-    results: VoteResults = Field(..., description="投票结果")
+    results: VoteStats = Field(..., description="投票结果")
     timeline: List[TimelinePoint] = Field(..., description="投票时间线")
     duration: int = Field(..., description="辩题持续时间（分钟）")
 

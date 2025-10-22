@@ -22,8 +22,9 @@ from src.models.activity import Activity
 from src.models.debate import Debate
 from src.models.vote import Participant, Vote, VoteHistory
 from src.schemas.debate import DebateStatus
-from src.schemas.vote import (ActivityInfo, ParticipantInfo, VotePosition,
-                              VoteResults, VoteStatus)
+from src.schemas.vote import (ActivityInfo, ParticipantInfo, ParticipantResponse,
+                              ParticipantVoteStatus, VotePosition, VoteRequest,
+                              VoteStats)
 
 
 class VoteService:
@@ -263,7 +264,8 @@ class VoteService:
         if debate_activity_id != activity_id:
             raise HTTPException(status_code=403, detail="无权限为此辩题投票")
 
-        allowed_statuses = [DebateStatus.ongoing.value, DebateStatus.final_vote.value]
+        allowed_statuses = [DebateStatus.ongoing.value,
+                            DebateStatus.final_vote.value]
         if debate_status not in allowed_statuses:
             raise HTTPException(status_code=400, detail="辩题当前不允许投票")
 
@@ -373,7 +375,7 @@ class VoteService:
         self,
         debate_id: str,
         session_token: str
-    ) -> VoteStatus:
+    ) -> ParticipantVoteStatus:
         """获取参与者的投票状态（从Redis）"""
 
         # 从Redis验证会话
@@ -411,7 +413,7 @@ class VoteService:
                 str(debate.status) in ["ongoing", "final_vote"]
             )
 
-            return VoteStatus(
+            return ParticipantVoteStatus(
                 hasVoted=True,
                 position=VotePosition(vote_data['position']),
                 votedAt=datetime.fromisoformat(vote_data['created_at']),
@@ -420,7 +422,7 @@ class VoteService:
                 canChange=can_change
             )
         else:
-            return VoteStatus(
+            return ParticipantVoteStatus(
                 hasVoted=False,
                 position=None,
                 votedAt=None,
@@ -429,7 +431,7 @@ class VoteService:
                 canChange=False
             )
 
-    def get_debate_results(self, debate_id: str) -> VoteResults:
+    def get_debate_results(self, debate_id: str) -> VoteStats:
         """获取辩题的投票统计结果（从Redis，带缓存）"""
 
         # 尝试从缓存获取
@@ -437,7 +439,7 @@ class VoteService:
         cached_results = self.redis.get(cache_key)  # type: ignore
         if cached_results:
             cached_data = json.loads(str(cached_results))
-            return VoteResults(**cached_data)
+            return VoteStats(**cached_data)
 
         # 验证辩题
         debate = self.db.query(Debate).filter(Debate.id == debate_id).first()
@@ -476,15 +478,24 @@ class VoteService:
         is_locked = debate_status == "ended"
         locked_at = getattr(debate, 'updated_at', None) if is_locked else None
 
-        results = VoteResults(
+        results = VoteStats(
             debateId=debate_id,
             totalVotes=total_votes,
             proVotes=pro_votes,
+            proPreviousVotes=0,  # TODO: Implement previous votes tracking
+            proToConVotes=0,     # TODO: Implement swing votes tracking
             conVotes=con_votes,
+            conPreviousVotes=0,  # TODO: Implement previous votes tracking
+            conToProVotes=0,     # TODO: Implement swing votes tracking
             abstainVotes=abstain_votes,
+            abstainPreviousVotes=0,  # TODO: Implement previous votes tracking
+            abstainToProVotes=0,     # TODO: Implement swing votes tracking
+            abstainToConVotes=0,     # TODO: Implement swing votes tracking
+            proScore=round(pro_percentage, 2),
+            conScore=round(con_percentage, 2),
+            abstainPercentage=round(abstain_percentage, 2),
             proPercentage=round(pro_percentage, 2),
             conPercentage=round(con_percentage, 2),
-            abstainPercentage=round(abstain_percentage, 2),
             winner=winner,
             isLocked=is_locked,
             lockedAt=locked_at

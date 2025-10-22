@@ -18,7 +18,8 @@ from src.models.debate import Debate
 from src.models.vote import Vote, VoteHistory
 from src.schemas.debate import (DebateCreate, DebateDetailResponse,
                                 DebateReorder, DebateResponse, DebateStatus,
-                                DebateStatusUpdate, DebateUpdate, VoteStats)
+                                DebateStatusUpdate, DebateUpdate)
+from src.schemas.vote import VoteStats
 from src.schemas.vote import VotePosition
 
 
@@ -373,6 +374,12 @@ class DebateService:
         abstain_percentage = (abstain_votes / total_votes *
                               100) if total_votes > 0 else 0
 
+        # 计算正方和反方百分比
+        pro_percentage = (pro_votes / total_votes *
+                          100) if total_votes > 0 else 0
+        con_percentage = (con_votes / total_votes *
+                          100) if total_votes > 0 else 0
+
         # 计算得分（根据规则）
         # 正方得分 = 反方到正方人数/反方初始人数 * 1000 + 中立到正方人数/中立初始人数 * 500
         pro_score = 0.0
@@ -389,20 +396,26 @@ class DebateService:
             con_score += (abstain_to_con / abstain_previous_votes * 500)
 
         return VoteStats(
-            total_votes=total_votes,
-            pro_votes=pro_votes,
-            con_votes=con_votes,
-            abstain_votes=abstain_votes,
-            abstain_percentage=round(abstain_percentage, 2),
-            pro_previous_votes=pro_previous_votes,
-            con_previous_votes=con_previous_votes,
-            abstain_previous_votes=abstain_previous_votes,
-            pro_to_con_votes=pro_to_con,
-            con_to_pro_votes=con_to_pro,
-            abstain_to_pro_votes=abstain_to_pro,
-            abstain_to_con_votes=abstain_to_con,
-            pro_score=round(pro_score, 2),
-            con_score=round(con_score, 2)
+            debateId=debate_id,
+            totalVotes=total_votes,
+            proVotes=pro_votes,
+            conVotes=con_votes,
+            abstainVotes=abstain_votes,
+            abstainPercentage=round(abstain_percentage, 2),
+            proPercentage=round(pro_percentage, 2),
+            conPercentage=round(con_percentage, 2),
+            proPreviousVotes=pro_previous_votes,
+            conPreviousVotes=con_previous_votes,
+            abstainPreviousVotes=abstain_previous_votes,
+            proToConVotes=pro_to_con,
+            conToProVotes=con_to_pro,
+            abstainToProVotes=abstain_to_pro,
+            abstainToConVotes=abstain_to_con,
+            proScore=round(pro_score, 2),
+            conScore=round(con_score, 2),
+            winner=None,
+            isLocked=False,
+            lockedAt=None
         )
 
     def get_current_debate(self, activity_id: str) -> DebateDetailResponse:

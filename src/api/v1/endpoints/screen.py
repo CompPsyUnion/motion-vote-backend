@@ -53,7 +53,7 @@ async def get_screen_display(
         "activity": activity_detail.model_dump(by_alias=True),
         "currentDebate": statistics.get("currentDebate"),
         "showData": statistics.get("currentDebateStats") is not None,
-        "voteResults": statistics.get("currentDebateStats"),
+        "VoteStats": statistics.get("currentDebateStats"),
         "timestamp": statistics.get("timestamp")
     }
 

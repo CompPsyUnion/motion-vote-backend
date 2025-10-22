@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
+from src.schemas.vote import VoteStats
 
 
 class DebateStatus(str, Enum):
@@ -10,6 +11,34 @@ class DebateStatus(str, Enum):
     ongoing = "ongoing"
     final_vote = "final_vote"
     ended = "ended"
+
+
+class BellTimingType(str, Enum):
+    start = "start"
+    warning = "warning"
+    end = "end"
+
+
+class DebateSide(BaseModel):
+    name: str = Field(..., description="辩手名称")
+    duration: int = Field(..., description="时长（秒）")
+
+
+class BellTiming(BaseModel):
+    time: int = Field(..., description="时间点（秒）")
+    type: BellTimingType = Field(..., description="铃声类型")
+
+
+class DebateStage(BaseModel):
+    stage_name: str = Field(..., alias="stageName", description="阶段名称")
+    is_dual_side: bool = Field(..., alias="isDualSide", description="是否双边辩论")
+    sides: list[DebateSide] = Field(..., description="辩手配置")
+    bell_timings: list[BellTiming] = Field(...,
+                                           alias="bellTimings", description="铃声时间配置")
+    hide_timer: Optional[bool] = Field(
+        False, alias="hideTimer", description="是否隐藏计时器")
+
+    model_config = {"populate_by_name": True}
 
 
 class DebateBase(BaseModel):
@@ -68,35 +97,14 @@ class DebateResponse(DebateBase):
     order: int = Field(..., description="排序号")
     created_at: datetime = Field(..., alias="createdAt", description="创建时间")
     updated_at: datetime = Field(..., alias="updatedAt", description="更新时间")
+    stages: list[DebateStage] = Field(
+        default_factory=list, description="辩论阶段列表")
+    current_stage: Optional[DebateStage] = Field(
+        None, alias="currentStage", description="当前阶段")
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 
-class VoteStats(BaseModel):
-    total_votes: int = Field(default=0, description="总投票数")
-
-    # 正方相关
-    pro_votes: int = Field(default=0, description="正方最终票数")
-    pro_previous_votes: int = Field(default=0, description="正方初始票数")
-    pro_to_con_votes: int = Field(default=0, description="正方到反方票数")
-
-    # 反方相关
-    con_votes: int = Field(default=0, description="反方最终票数")
-    con_previous_votes: int = Field(default=0, description="反方初始票数")
-    con_to_pro_votes: int = Field(default=0, description="反方到正方票数")
-
-    # 中立相关
-    abstain_votes: int = Field(default=0, description="中立最终票数")
-    abstain_previous_votes: int = Field(default=0, description="中立初始票数")
-    abstain_to_pro_votes: int = Field(default=0, description="中立到正方票数")
-    abstain_to_con_votes: int = Field(default=0, description="中立到反方票数")
-
-    # 得分和百分比
-    pro_score: float = Field(default=0.0, description="正方分数")
-    con_score: float = Field(default=0.0, description="反方分数")
-    abstain_percentage: float = Field(default=0.0, description="弃权率")
-
-
 class DebateDetailResponse(DebateResponse):
     vote_stats: VoteStats = Field(
-        default_factory=VoteStats, description="投票统计")
+        default_factory=lambda: VoteStats(debateId=None, winner=None, lockedAt=None), description="投票统计")

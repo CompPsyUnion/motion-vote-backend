@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from src.schemas.activity import ActivityResponse
 from src.schemas.debate import DebateResponse
-from src.schemas.vote import VoteResults
+from src.schemas.vote import VoteStats
 
 
 class DisplayType(str, Enum):
@@ -41,7 +41,7 @@ class ScreenDisplayData(BaseModel):
     showData: bool = Field(
         default=True, description="是否显示投票数据", alias="show_data"
     )
-    voteResults: Optional[VoteResults] = Field(
+    VoteStats: Optional[VoteStats] = Field(
         None, description="投票结果", alias="vote_results"
     )
     timestamp: datetime = Field(

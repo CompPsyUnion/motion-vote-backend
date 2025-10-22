@@ -28,7 +28,7 @@ from src.models.vote import Participant, Vote
 from src.schemas.statistics import (ActivityReport, ActivitySummary,
                                     ActivityType, DashboardData, DebateResult,
                                     DebateStats, ExportType, RealTimeStats,
-                                    RecentActivity, TimelinePoint, VoteResults)
+                                    RecentActivity, TimelinePoint, VoteStats)
 from src.schemas.user import UserRole
 
 
@@ -492,13 +492,13 @@ class StatisticsService:
             stats.append(DebateStats(
                 debateId=str(debate.id),
                 debateTitle=str(debate.title),
-                voteResults=vote_results,
+                VoteStats=vote_results,
                 voteRate=vote_rate
             ))
 
         return stats
 
-    def _get_vote_results(self, debate_id: str) -> VoteResults:
+    def _get_vote_results(self, debate_id: str) -> VoteStats:
         """获取投票结果"""
         from src.models.vote import VoteHistory
 
@@ -612,7 +612,7 @@ class StatisticsService:
             else:
                 winner = "tie"
 
-        return VoteResults.model_validate({
+        return VoteStats.model_validate({
             "debateId": debate_id,
             "proVotes": pro_votes,
             "conVotes": con_votes,

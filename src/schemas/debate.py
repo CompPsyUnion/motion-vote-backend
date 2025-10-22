@@ -1,8 +1,9 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+import json
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from src.schemas.vote import VoteStats
 
 
@@ -101,6 +102,18 @@ class DebateResponse(DebateBase):
         default_factory=list, description="辩论阶段列表")
     current_stage: Optional[DebateStage] = Field(
         None, alias="currentStage", description="当前阶段")
+
+    @field_validator('stages', mode='before')
+    @classmethod
+    def parse_stages(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return []
+        return v
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 

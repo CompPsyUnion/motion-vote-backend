@@ -22,7 +22,7 @@ Base = declarative_base()
 
 
 def init_database():
-    """初始化数据库，如果表不存在则自动创建"""
+    """初始化数据库，如果表不存在则自动创建，如果表缺少列则添加"""
     try:
         # 检查数据库连接
         inspector = inspect(engine)
@@ -52,7 +52,43 @@ def init_database():
             print("✅ 数据库表创建成功！")
             print(f"📋 已创建的表: {expected_tables}")
         else:
-            print("✅ 数据库表已存在，无需创建")
+            print("✅ 数据库表已存在，正在检查表结构...")
+
+            # 检查现有表的列是否完整
+            from sqlalchemy import text
+            for table_name in expected_tables:
+                if table_name in existing_tables:
+                    existing_columns = {col['name']
+                                        for col in inspector.get_columns(table_name)}
+                    expected_columns = {
+                        col.name for col in Base.metadata.tables[table_name].columns}
+
+                    missing_columns = expected_columns - existing_columns
+
+                    if missing_columns:
+                        print(f"表 {table_name} 缺少列: {missing_columns}")
+                        print("正在添加缺失的列...")
+
+                        # 为每个缺失的列添加 ALTER TABLE 语句
+                        for col_name in missing_columns:
+                            col = Base.metadata.tables[table_name].columns[col_name]
+                            # 构建 ALTER TABLE 语句
+                            col_type = str(col.type).upper()
+                            nullable = "NULL" if col.nullable else "NOT NULL"
+                            default = f"DEFAULT {col.default.arg}" if col.default else ""
+
+                            alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type} {nullable} {default}".strip(
+                            )
+
+                            try:
+                                with engine.connect() as conn:
+                                    conn.execute(text(alter_sql))
+                                    conn.commit()
+                                print(f"✅ 已添加列 {table_name}.{col_name}")
+                            except Exception as e:
+                                print(f"❌ 添加列 {table_name}.{col_name} 失败: {e}")
+
+            print("✅ 数据库表结构检查完成")
 
     except Exception as e:
         print(f"❌ 数据库初始化失败: {e}")

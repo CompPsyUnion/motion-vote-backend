@@ -487,19 +487,31 @@ class DebateService:
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-        # 获取之前的当前辩题
-        old_debate_id = getattr(activity, 'current_debate_id', None)
+        # 将所有当前活动的辩题（状态为ongoing或final_vote）设置为ended
+        self.db.query(Debate).filter(
+            Debate.activity_id == activity_id,
+            Debate.status.in_([DebateStatus.ongoing, DebateStatus.final_vote])
+        ).update({
+            "status": DebateStatus.ended,
+            "ended_at": datetime.now()
+        })
 
-        # 如果有之前的辩题，标记为结束
-        if old_debate_id and old_debate_id != debate_id:
-            old_debate = self.db.query(Debate).filter(
-                Debate.id == old_debate_id
-            ).first()
-
-            if old_debate:
-                old_ended_at = getattr(old_debate, 'ended_at', None)
-                if not old_ended_at:
-                    setattr(old_debate, 'ended_at', datetime.now())
+        # 如果新辩题已经是ended状态，将其重新激活为ongoing，并重置后续辩题为pending
+        if getattr(debate, 'status', None) == DebateStatus.ended:
+            # 将新辩题设为ongoing
+            setattr(debate, 'status', DebateStatus.ongoing)
+            # 重置后续辩题为pending
+            self.db.query(Debate).filter(
+                Debate.activity_id == activity_id,
+                Debate.order > debate.order
+            ).update({
+                "status": DebateStatus.pending,
+                "started_at": None,
+                "ended_at": None
+            })
+        else:
+            # 设置新辩题状态为ongoing
+            setattr(debate, 'status', DebateStatus.ongoing)
 
         # 标记新辩题开始
         debate_started_at = getattr(debate, 'started_at', None)

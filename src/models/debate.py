@@ -23,6 +23,7 @@ class Debate(Base):
     estimated_duration = Column(Integer, nullable=True)
     order = Column(Integer, nullable=False, default=0)
     stages = Column(Text, nullable=True, comment="辩论阶段配置（JSON）")
+    background_image_url = Column(String(500), nullable=True, comment="辩题背景图")
 
     # 辩题时间跟踪
     started_at = Column(DateTime(timezone=True),

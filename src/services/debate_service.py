@@ -215,6 +215,32 @@ class DebateService:
             service = VoteService(self.db)
             service.invalidate_debate_cache(debate_id)
 
+    def update_debate_stages(
+        self,
+        debate_id: str,
+        stages: list
+    ) -> None:
+        """更新辩题阶段设置
+
+        Args:
+            debate_id: 辩题ID
+            stages: 阶段列表
+        """
+        import json
+
+        debate = self.get_debate_by_id(debate_id)
+
+        # 将 Pydantic 模型列表转换为字典列表再序列化为 JSON
+        stages_dict = [stage.model_dump(by_alias=True) for stage in stages]
+        stages_json = json.dumps(stages_dict, ensure_ascii=False)
+
+        # 更新阶段设置
+        self.db.query(Debate).filter(
+            Debate.id == debate_id
+        ).update({"stages": stages_json})
+
+        self.db.commit()
+
     def delete_debate(self, debate_id: str) -> None:
         """删除辩题
 

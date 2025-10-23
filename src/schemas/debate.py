@@ -51,6 +51,8 @@ class DebateBase(BaseModel):
     background: Optional[str] = Field(None, description="辩题背景介绍")
     estimated_duration: Optional[int] = Field(
         None, alias="estimatedDuration", description="预计辩论时长（分钟）")
+    background_image_url: Optional[str] = Field(
+        None, alias="backgroundImageUrl", description="辩题背景图")
 
     model_config = {"populate_by_name": True}
 
@@ -68,6 +70,8 @@ class DebateUpdate(BaseModel):
     background: Optional[str] = Field(None, description="辩题背景介绍")
     estimated_duration: Optional[int] = Field(
         None, alias="estimatedDuration", description="预计辩论时长（分钟）")
+    background_image_url: Optional[str] = Field(
+        None, alias="backgroundImageUrl", description="辩题背景图")
 
     model_config = {"populate_by_name": True}
 

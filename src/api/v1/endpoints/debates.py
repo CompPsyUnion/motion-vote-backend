@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from src.api.dependencies import get_current_user, get_db
 from src.models.user import User
-from src.schemas.debate import (DebateReorder, DebateStatusUpdate,
+from src.schemas.debate import (DebateReorder, DebateStage, DebateStatusUpdate,
                                 DebateUpdate)
 from src.services.activity_service import ActivityService
 from src.services.debate_service import DebateService
@@ -150,4 +150,31 @@ async def reorder_debates(
     return {
         "success": True,
         "message": "辩题排序更新成功"
+    }
+
+
+@router.put("/{debate_id}/stages")
+@router.put("/{debate_id}/stages/")
+async def update_debate_stages(
+    debate_id: str,
+    stages: list[DebateStage],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """更新辩题阶段设置"""
+    debate_service = DebateService(db)
+    debate = debate_service.get_debate_by_id(debate_id)
+
+    # 检查权限
+    activity_service = ActivityService(db)
+    activity_service.check_activity_permission(
+        str(debate.activity_id), "edit", current_user
+    )
+
+    # 更新阶段设置
+    debate_service.update_debate_stages(debate_id, stages)
+
+    return {
+        "success": True,
+        "message": "辩题阶段设置更新成功"
     }

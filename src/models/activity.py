@@ -26,6 +26,8 @@ class Activity(Base):
     actual_participants = Column(Integer, default=0, nullable=False)
     tags = Column(JSON, default=list, nullable=False)
     settings = Column(JSON, nullable=False)
+    background_image_url = Column(String(500), nullable=True, comment="活动背景图")
+    logo_url = Column(String(500), nullable=True, comment="活动Logo")
 
     # 外键
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=False)

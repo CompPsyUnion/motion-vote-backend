@@ -45,6 +45,10 @@ class ActivityBase(BaseModel):
     tags: Optional[List[str]] = Field(default=[], description="活动标签")
     settings: Optional[ActivitySettings] = Field(
         default_factory=ActivitySettings, description="活动设置")
+    backgroundImageUrl: Optional[str] = Field(
+        None, description="活动背景图", alias="background_image_url")
+    logoUrl: Optional[str] = Field(
+        None, description="活动Logo", alias="logo_url")
 
     class Config:
         populate_by_name = True
@@ -68,6 +72,10 @@ class ActivityUpdate(BaseModel):
         None, description="预计参与人数", alias="expected_participants")
     tags: Optional[List[str]] = Field(None, description="活动标签")
     settings: Optional[ActivitySettings] = Field(None, description="活动设置")
+    backgroundImageUrl: Optional[str] = Field(
+        None, description="活动背景图", alias="background_image_url")
+    logoUrl: Optional[str] = Field(
+        None, description="活动Logo", alias="logo_url")
 
     class Config:
         populate_by_name = True

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from src.api.v1.endpoints import (activities, auth, debates, participants,
-                                  screen, site_info, statistics, users, votes,
-                                  websocket_screen)
+                                  participants_qrcode, screen, site_info, 
+                                  statistics, users, votes, websocket_screen)
 
 api_router = APIRouter()
 
@@ -24,6 +24,10 @@ api_router.include_router(
 # 参与者管理路由
 api_router.include_router(
     participants.router, prefix="/participants", tags=["participants"])
+
+# 参与者二维码导出路由
+api_router.include_router(
+    participants_qrcode.router, prefix="", tags=["participants"])
 
 # 投票系统路由
 api_router.include_router(

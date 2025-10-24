@@ -279,10 +279,15 @@ class DebateService:
         """
         debate = self.get_debate_by_id(debate_id)
         activity_id = str(debate.activity_id)
+        old_status = debate.status
 
         # 更新状态
         setattr(debate, 'status', status_data.status)
         self.db.commit()
+
+        # 如果是从pending转换到ongoing，需要处理未投票的参与者
+        if str(old_status) == "pending" and str(status_data.status) == "ongoing":
+            self._handle_pending_to_ongoing_transition(debate_id, activity_id)
 
         # 清除Redis缓存
         from src.services.vote_service import VoteService
@@ -576,6 +581,10 @@ class DebateService:
             # 创建新的数据库会话用于异步任务
             db = SessionLocal()
             try:
+                # 先获取统计服务实例，确保 stats_service 始终被绑定
+                from src.services.statistics_service import get_statistics_service
+                stats_service = get_statistics_service(db)
+
                 # 获取辩题信息
                 debate = db.query(Debate).filter(
                     Debate.id == debate_id).first()
@@ -595,15 +604,77 @@ class DebateService:
                     # 广播辩题切换事件
                     await broadcast_debate_change(activity_id, debate_data)
 
-                    # 然后触发统计更新
-                    from src.services.statistics_service import get_statistics_service
-                    stats_service = get_statistics_service(db)
-                    await stats_service.update_statistics_cache(activity_id, debate_id)
+                # 无论 debate 是否存在，都调用统计更新
+                await stats_service.update_statistics_cache(activity_id, debate_id)
 
             finally:
                 db.close()
         except Exception as e:
-            print(f"[ERROR] 触发辩题切换广播失败: {e}")
+            print(f"[ERROR] 触发统计更新广播失败: {e}")
+
+    def _handle_pending_to_ongoing_transition(self, debate_id: str, activity_id: str):
+        """处理从pending到ongoing状态的转换
+
+        对于所有在pending阶段没有投票的已入场参与者，
+        在转换到ongoing时自动设置为abstain投票
+        """
+        try:
+            from src.services.vote_service import VoteService
+            from src.models.vote import Participant
+            import json
+            from datetime import datetime, timezone
+            import uuid
+            from src.core.redis import get_redis
+
+            redis = get_redis()
+
+            # 获取已入场但未对此辩题投票的参与者
+            checked_in_participants = self.db.query(Participant).filter(
+                Participant.activity_id == activity_id,
+                Participant.checked_in == True
+            ).all()
+
+            # 获取已投票的参与者集合
+            voted_participants_raw = redis.smembers(
+                f"debate:{debate_id}:votes")  # type: ignore
+            from typing import Set, cast
+            voted_participants = cast(
+                Set[str], voted_participants_raw) if voted_participants_raw else set()
+
+            # 为未投票的参与者创建abstain票
+            non_voted_count = 0
+            for participant in checked_in_participants:
+                participant_id = str(participant.id)
+                if participant_id not in voted_participants:
+                    non_voted_count += 1
+                    # 创建abstain投票记录
+                    vote_data = {
+                        "vote_id": str(uuid.uuid4()),
+                        "participant_id": participant_id,
+                        "debate_id": debate_id,
+                        "position": "abstain",
+                        "change_count": 0,
+                        "is_final": False,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }
+
+                    # 存储到Redis
+                    vote_key = f"vote:{debate_id}:{participant_id}"
+                    redis.set(vote_key, json.dumps(vote_data))  # type: ignore
+
+                    # 添加到投票者集合和位置集合
+                    redis.sadd(f"debate:{debate_id}:votes",
+                               participant_id)  # type: ignore
+                    # type: ignore
+                    redis.sadd(
+                        f"debate:{debate_id}:position:abstain", participant_id)
+
+            print(
+                f"[INFO] 处理pending到ongoing转换完成，为{non_voted_count}个未投票参与者设置为abstain")
+
+        except Exception as e:
+            print(f"[ERROR] 处理pending到ongoing转换失败: {e}")
 
     async def _trigger_statistics_update_after_status_change(self, activity_id: str, debate_id: str):
         """辩题状态更新后触发统计更新和 WebSocket 广播"""

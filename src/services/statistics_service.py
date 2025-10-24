@@ -5,7 +5,7 @@ import csv
 import io
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, cast
 
 from fastapi import HTTPException
 from openpyxl import Workbook
@@ -222,7 +222,7 @@ class StatisticsService:
                 }
 
                 # 获取当前辩题的投票统计
-                current_debate_stats = await self._get_debate_vote_stats_from_redis(str(debate.id))
+                current_debate_stats = await self._get_debate_vote_stats_from_redis(str(debate.id), activity_id)
 
         # 总参与人数
         total_participants = self.db.query(Participant).filter(
@@ -260,11 +260,11 @@ class StatisticsService:
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
-    async def _get_debate_vote_stats_from_redis(self, debate_id: str) -> Dict[str, Any]:
+    async def _get_debate_vote_stats_from_redis(self, debate_id: str, activity_id: Optional[str] = None) -> Dict[str, Any]:
         """获取辩题的投票统计（使用完整的VoteStats）"""
         try:
             # 使用_get_vote_results获取完整的投票统计
-            vote_stats = self._get_vote_results(debate_id)
+            vote_stats = self._get_vote_results(debate_id, activity_id)
             return vote_stats.model_dump(by_alias=True)
         except Exception as e:
             print(f"[ERROR] 获取辩题投票统计失败: {e}")
@@ -285,18 +285,24 @@ class StatisticsService:
                 "proScore": 0.0,
                 "conScore": 0.0,
                 "abstainPercentage": 0.0,
+                "totalParticipants": 0,
+                "nonVotingParticipants": 0,
                 "winner": None,
                 "isLocked": False,
                 "lockedAt": None
             }
 
-    async def _load_debate_stats_from_db(self, debate_id: str) -> Dict[str, Any]:
+    async def _load_debate_stats_from_db(self, debate_id: str, activity_id: Optional[str] = None) -> Dict[str, Any]:
         """从数据库加载辩题统计"""
         debate = self.db.query(Debate).filter(Debate.id == debate_id).first()
         if not debate:
             return {}
 
-        vote_stats = await self._get_debate_vote_stats_from_redis(debate_id)
+        # 如果没有传入activity_id，从debate中获取
+        if activity_id is None:
+            activity_id = str(debate.activity_id)
+
+        vote_stats = await self._get_debate_vote_stats_from_redis(debate_id, activity_id)
 
         return {
             "debateId": debate_id,
@@ -456,7 +462,7 @@ class StatisticsService:
 
         stats = []
         for debate in debates:
-            vote_results = self._get_vote_results(str(debate.id))
+            vote_results = self._get_vote_results(str(debate.id), activity_id)
 
             # 计算投票率
             checked_in_count = self.db.query(Participant).filter(
@@ -480,45 +486,61 @@ class StatisticsService:
 
         return stats
 
-    def _get_vote_results(self, debate_id: str) -> VoteStats:
-        """获取投票结果"""
-        from src.models.vote import VoteHistory
+    def _get_vote_results(self, debate_id: str, activity_id: Optional[str] = None) -> VoteStats:
+        """获取投票结果（从Redis实时计算）"""
+        # 从Redis获取投票计数
+        pro_votes_raw = self.redis.smembers(f"debate:{debate_id}:position:pro")
+        con_votes_raw = self.redis.smembers(f"debate:{debate_id}:position:con")
+        abstain_votes_raw = self.redis.smembers(
+            f"debate:{debate_id}:position:abstain")
 
-        # 统计各立场的当前票数
-        vote_counts = self.db.query(
-            Vote.position,
-            func.count(Vote.id).label('count')
-        ).filter(Vote.debate_id == debate_id).group_by(Vote.position).all()
+        # Some Redis clients return awaitables; cast to Set for static typing.
+        # At runtime these should be actual sets; casting silences the type checker.
+        pro_votes_set = cast(Set, pro_votes_raw) or set()
+        con_votes_set = cast(Set, con_votes_raw) or set()
+        abstain_votes_set = cast(Set, abstain_votes_raw) or set()
 
-        pro_votes = 0
-        con_votes = 0
-        abstain_votes = 0
-
-        for position, count in vote_counts:
-            if position == 'pro':
-                pro_votes = count
-            elif position == 'con':
-                con_votes = count
-            elif position == 'abstain':
-                abstain_votes = count
+        pro_votes = len(pro_votes_set)
+        con_votes = len(con_votes_set)
+        abstain_votes = len(abstain_votes_set)
 
         total_votes = pro_votes + con_votes + abstain_votes
 
-        # 计算初始票数：从VoteHistory中获取每个投票的第一个位置
-        votes_with_history = self.db.query(Vote).filter(
-            Vote.debate_id == debate_id).all()
+        # 计算参与者信息 - 从Redis获取已入场参与者
+        total_participants = 0
+        if activity_id:
+            # 从Redis或数据库获取已入场的参与者总数
+            participants_key = f"activity:{activity_id}:checked_in_participants"
+            cached_participants = self.redis.get(participants_key)
 
+            if cached_participants:
+                # cached_participants may be bytes/str or an awaitable response depending on Redis client
+                # decode bytes to str and use cast to satisfy the type checker
+                cp = cached_participants
+                if isinstance(cp, (bytes, bytearray)):
+                    cp = cp.decode()
+                total_participants = int(cast(str, cp))
+            else:
+                # 回退到数据库查询并缓存结果
+                total_participants = self.db.query(Participant).filter(
+                    Participant.activity_id == activity_id,
+                    Participant.checked_in == True
+                ).count()
+                # 缓存5分钟
+                self.redis.setex(participants_key, 300,
+                                 str(total_participants))
+
+        # 从Redis获取所有投票记录来计算初始票数和流动票数
+        all_voters_raw = cast(Set[str], self.redis.smembers(
+            f"debate:{debate_id}:votes"))  # type: ignore
+        all_voters = list(all_voters_raw) if all_voters_raw else []
+
+        # 初始化各项统计
         pro_previous_votes = 0
         con_previous_votes = 0
         abstain_previous_votes = 0
 
-        # 统计从各方跑票到其他方的人数
-        # pro_to_con: 从正方跑到反方的人数
-        # pro_to_abstain: 从正方跑到弃权的人数
-        # con_to_pro: 从反方跑到正方的人数
-        # con_to_abstain: 从反方跑到弃权的人数
-        # abstain_to_pro: 从弃权跑到正方的人数
-        # abstain_to_con: 从弃权跑到反方的人数
+        # 流动票数统计
         pro_to_con = 0
         pro_to_abstain = 0
         con_to_pro = 0
@@ -526,48 +548,76 @@ class StatisticsService:
         abstain_to_pro = 0
         abstain_to_con = 0
 
-        for vote in votes_with_history:
-            # 获取该投票的最早历史记录
-            first_history = self.db.query(VoteHistory).filter(
-                VoteHistory.vote_id == vote.id
-            ).order_by(VoteHistory.created_at.asc()).first()
+        # 从Redis获取每个投票者的详细投票记录
+        for voter_id in all_voters:
+            vote_key = f"vote:{debate_id}:{voter_id}"
+            vote_data_str = self.redis.get(vote_key)  # type: ignore
 
-            if first_history:
-                # 使用历史记录中的第一个位置
-                initial_position = getattr(first_history, 'new_position')
-            else:
-                # 没有历史记录，说明从未改过票，使用当前位置
-                initial_position = getattr(vote, 'position')
+            if not vote_data_str:
+                continue
 
-            # 当前位置
-            current_position = getattr(vote, 'position')
+            try:
+                vote_data = json.loads(str(vote_data_str))
+                current_position = vote_data.get('position')
 
-            # 统计初始票数
-            if initial_position == 'pro':
-                pro_previous_votes += 1
-            elif initial_position == 'con':
-                con_previous_votes += 1
-            elif initial_position == 'abstain':
-                abstain_previous_votes += 1
+                # 获取投票历史来确定初始立场
+                history_key = f"{vote_key}:history"
+                history_raw = cast(List[str], self.redis.lrange(
+                    history_key, 0, -1))  # type: ignore
+                history_data = list(history_raw) if history_raw else []
 
-            # 统计跑票情况（初始位置和当前位置不同）
-            if initial_position != current_position:
-                if initial_position == 'pro' and current_position == 'con':
-                    pro_to_con += 1
-                elif initial_position == 'pro' and current_position == 'abstain':
-                    pro_to_abstain += 1
-                elif initial_position == 'con' and current_position == 'pro':
-                    con_to_pro += 1
-                elif initial_position == 'con' and current_position == 'abstain':
-                    con_to_abstain += 1
-                elif initial_position == 'abstain' and current_position == 'pro':
-                    abstain_to_pro += 1
-                elif initial_position == 'abstain' and current_position == 'con':
-                    abstain_to_con += 1
+                if history_data:
+                    # 获取第一条历史记录（最早的投票）
+                    first_vote_str = history_data[-1]  # LPUSH存储，所以最后一个是最早的
+                    try:
+                        first_vote = json.loads(str(first_vote_str))
+                        initial_position = first_vote.get('position')
+                    except (json.JSONDecodeError, AttributeError):
+                        # 如果解析失败，使用当前立场作为初始立场
+                        initial_position = current_position
+                else:
+                    # 如果没有历史记录，说明没有改过票，当前立场就是初始立场
+                    initial_position = current_position
 
-        # 计算弃权百分比
-        abstain_percentage = (abstain_votes / total_votes *
-                              100) if total_votes > 0 else 0
+                # 统计初始票数
+                if initial_position == 'pro':
+                    pro_previous_votes += 1
+                elif initial_position == 'con':
+                    con_previous_votes += 1
+                elif initial_position == 'abstain':
+                    abstain_previous_votes += 1
+
+                # 统计流动票数（如果立场发生了变化）
+                if initial_position != current_position:
+                    if initial_position == 'pro' and current_position == 'con':
+                        pro_to_con += 1
+                    elif initial_position == 'pro' and current_position == 'abstain':
+                        pro_to_abstain += 1
+                    elif initial_position == 'con' and current_position == 'pro':
+                        con_to_pro += 1
+                    elif initial_position == 'con' and current_position == 'abstain':
+                        con_to_abstain += 1
+                    elif initial_position == 'abstain' and current_position == 'pro':
+                        abstain_to_pro += 1
+                    elif initial_position == 'abstain' and current_position == 'con':
+                        abstain_to_con += 1
+
+            except (json.JSONDecodeError, AttributeError, KeyError):
+                # 跳过无法解析的记录
+                continue
+
+        # 计算未投票的参与者数量
+        non_voting_participants = max(0, total_participants - total_votes)
+
+        # 将未投票人数加入abstain_votes（根据要求：abstain_votes=non_voting_participants）
+        total_abstain_votes = abstain_votes + non_voting_participants
+
+        # 重新计算总投票数（包含未投票人数）
+        adjusted_total_votes = pro_votes + con_votes + total_abstain_votes
+
+        # 计算弃权百分比（基于调整后的总票数）
+        abstain_percentage = (total_abstain_votes / adjusted_total_votes *
+                              100) if adjusted_total_votes > 0 else 0
 
         # 计算得分（根据新规则）
         # 正方得分 = 反方到正方人数/反方初始人数 * 1000 + 中立到正方人数/中立初始人数 * 500
@@ -598,8 +648,8 @@ class StatisticsService:
             "debateId": debate_id,
             "proVotes": pro_votes,
             "conVotes": con_votes,
-            "abstainVotes": abstain_votes,
-            "totalVotes": total_votes,
+            "abstainVotes": total_abstain_votes,  # 包含未投票人数
+            "totalVotes": adjusted_total_votes,   # 调整后的总票数
             "proPreviousVotes": pro_previous_votes,
             "conPreviousVotes": con_previous_votes,
             "abstainPreviousVotes": abstain_previous_votes,
@@ -717,7 +767,7 @@ class StatisticsService:
 
         results = []
         for debate in debates:
-            vote_results = self._get_vote_results(str(debate.id))
+            vote_results = self._get_vote_results(str(debate.id), activity_id)
             timeline = self._get_debate_timeline(str(debate.id))
 
             # 计算辩题持续时间

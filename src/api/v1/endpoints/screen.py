@@ -60,7 +60,7 @@ async def get_screen_display(
         "activityName": activity_detail.name,
         "activityStatus": activity_detail.status,
         "currentDebate": statistics.get("currentDebate"),
-        "currentDebateStats": statistics.get("currentDebateStats"),
+        "voteStats": statistics.get("voteStats"),
         "timestamp": statistics.get("timestamp")
     }
 

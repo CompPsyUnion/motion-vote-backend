@@ -122,4 +122,4 @@ class DebateResponse(DebateBase):
 
 class DebateDetailResponse(DebateResponse):
     vote_stats: VoteStats = Field(
-        default_factory=lambda: VoteStats(debateId=None, winner=None, lockedAt=None), description="投票统计")
+        default_factory=lambda: VoteStats(debateId="", winner=None, lockedAt=None), description="投票统计")

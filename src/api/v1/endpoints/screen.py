@@ -54,22 +54,17 @@ async def get_screen_display(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # 组合为 ScreenDisplayData（让 pydantic 验证/格式化字段）
-    display_payload = {
-        "activity": activity_detail.model_dump(by_alias=True),
+    # 简化返回数据结构，只返回用户要求的字段
+    simplified_data = {
+        "activityId": activity_detail.id,
+        "activityName": activity_detail.name,
+        "activityStatus": activity_detail.status,
         "currentDebate": statistics.get("currentDebate"),
-        "showData": statistics.get("currentDebateStats") is not None,
-        "VoteStats": statistics.get("currentDebateStats"),
+        "currentDebateStats": statistics.get("currentDebateStats"),
         "timestamp": statistics.get("timestamp")
     }
 
-    try:
-        screen_data = ScreenDisplayData.model_validate(display_payload)
-    except Exception:
-        # 如果转换失败，仍返回基础统计数据作为降级处理
-        return ApiResponse(success=True, data=statistics, message="获取成功")
-
-    return ApiResponse(success=True, data=screen_data.model_dump(by_alias=True), message="获取成功")
+    return ApiResponse(success=True, data=simplified_data, message="获取成功")
 
 
 @router.post("/{activity_id}/control", response_model=ApiResponse)

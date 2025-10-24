@@ -7,7 +7,7 @@
 """
 
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from src.api.dependencies import get_db
 from src.schemas.vote import ParticipantEnter, VoteRequest
@@ -28,6 +28,42 @@ async def participant_enter(
         activity_id=enter_data.activity_id,
         participant_code=enter_data.participant_code,
         device_fingerprint=enter_data.device_fingerprint
+    )
+
+    return {
+        "success": True,
+        "message": "入场成功",
+        "data": result
+    }
+
+
+@router.post("/enter-by-id")
+@router.post("/enter-by-id/")
+async def participant_enter_by_id(
+    request_data: dict,
+    db: Session = Depends(get_db)
+):
+    """参与者通过 participantID 直接进入活动（不需要认证）"""
+    from src.models.activity import Participant
+    from fastapi import HTTPException
+    
+    participant_id = request_data.get('participant_id') or request_data.get('participantId')
+    device_fingerprint = request_data.get('device_fingerprint') or request_data.get('deviceFingerprint')
+    
+    if not participant_id:
+        raise HTTPException(status_code=400, detail="缺少 participant_id 参数")
+    
+    # 查找参与者
+    participant = db.query(Participant).filter(Participant.id == participant_id).first()
+    if not participant:
+        raise HTTPException(status_code=404, detail="参与者不存在")
+    
+    # 调用原有的入场逻辑
+    service = VoteService(db)
+    result = service.participant_enter(
+        activity_id=str(participant.activity_id),
+        participant_code=participant.code,
+        device_fingerprint=device_fingerprint
     )
 
     return {

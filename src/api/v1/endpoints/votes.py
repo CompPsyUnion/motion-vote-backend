@@ -22,11 +22,34 @@ async def participant_enter(
     enter_data: ParticipantEnter,
     db: Session = Depends(get_db)
 ):
-    """参与者通过活动ID和编号进入活动"""
+    """参与者入场
+    
+    支持两种入场方式：
+    1. 提供 activity_id 和 participant_code
+    2. 直接提供 participant_id（推荐）
+    """
+    from src.models.vote import Participant
+    from fastapi import HTTPException
+    
+    activity_id = enter_data.activity_id
+    participant_code = enter_data.participant_code
+    participant_id = enter_data.participant_id
+    
+    # 如果提供了 participant_id，自动查找 activity_id 和 participant_code
+    if participant_id:
+        participant = db.query(Participant).filter(Participant.id == participant_id).first()
+        if not participant:
+            raise HTTPException(status_code=404, detail="参与者不存在")
+        
+        activity_id = str(participant.activity_id)
+        participant_code = participant.code
+    elif not (activity_id and participant_code):
+        raise HTTPException(status_code=400, detail="缺少必要的参数：需要提供 participant_id 或者 activity_id 和 participant_code")
+    
     service = VoteService(db)
     result = service.participant_enter(
-        activity_id=enter_data.activity_id,
-        participant_code=enter_data.participant_code,
+        activity_id=activity_id,
+        participant_code=participant_code,
         device_fingerprint=enter_data.device_fingerprint
     )
 

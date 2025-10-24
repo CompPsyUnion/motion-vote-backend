@@ -6,18 +6,24 @@
 - 触发各类广播事件
 """
 
-from typing import Any, Dict
-
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-
-from src.api.dependencies import get_db
-from src.services.screen_service import ScreenService
-from src.services.activity_service import ActivityService
-from src.schemas.screen import ScreenDisplayData, DisplayType
+from src.api.dependencies import get_current_user, get_db
+from src.core.websocket_manager import screen_manager
+from src.models.user import User
 from src.schemas.base import ApiResponse
+from src.schemas.screen import DisplayType, ScreenDisplayData
+from src.services.activity_service import ActivityService
+from src.services.screen_service import ScreenService
 
 router = APIRouter()
+
+
+class ScreenControlRequest(BaseModel):
+    """大屏控制请求"""
+    action: str = Field(...,
+                        description="控制动作: toggle_cover_page, next_stage, previous_stage")
 
 
 @router.get("/{activity_id}/display", response_model=ApiResponse)
@@ -65,4 +71,46 @@ async def get_screen_display(
 
     return ApiResponse(success=True, data=screen_data.model_dump(by_alias=True), message="获取成功")
 
-# TODO: /api/screen/{activityId}/control
+
+@router.post("/{activity_id}/control", response_model=ApiResponse)
+@router.post("/{activity_id}/control/", response_model=ApiResponse)
+async def control_screen(
+    activity_id: str,
+    control_data: ScreenControlRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> ApiResponse:
+    """大屏控制 - 远程控制大屏显示内容
+
+    支持的控制动作:
+    - toggle_cover_page: 切换封面页显示
+    - next_stage: 下一个阶段
+    - previous_stage: 上一个阶段
+    """
+    # 验证活动权限
+    activity_service = ActivityService(db)
+    activity_service.check_activity_permission(
+        activity_id, "control", current_user)
+
+    # 验证动作
+    valid_actions = ["toggle_cover_page", "next_stage", "previous_stage"]
+    if control_data.action not in valid_actions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
+        )
+
+    # 通过 WebSocket 广播控制指令
+    message = {
+        "type": "screen_control",
+        "action": control_data.action,
+        "activity_id": activity_id,
+        "timestamp": __import__("datetime").datetime.now().isoformat()
+    }
+
+    await screen_manager.broadcast_to_room(activity_id, message)
+
+    return ApiResponse(
+        success=True,
+        message=f"Screen control command '{control_data.action}' sent successfully"
+    )

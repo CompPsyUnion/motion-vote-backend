@@ -428,8 +428,6 @@ class DebateService:
             conVotes=con_votes,
             abstainVotes=abstain_votes,
             abstainPercentage=round(abstain_percentage, 2),
-            proPercentage=round(pro_percentage, 2),
-            conPercentage=round(con_percentage, 2),
             proPreviousVotes=pro_previous_votes,
             conPreviousVotes=con_previous_votes,
             abstainPreviousVotes=abstain_previous_votes,
@@ -564,10 +562,48 @@ class DebateService:
 
         self.db.commit()
 
-        # 触发统计更新和 WebSocket 广播（异步）
+        # 触发辩题切换广播和统计更新（异步）
         import asyncio
         asyncio.create_task(
-            self._trigger_statistics_update_after_status_change(activity_id, debate_id))
+            self._trigger_debate_change_broadcast(activity_id, debate_id))
+
+    async def _trigger_debate_change_broadcast(self, activity_id: str, debate_id: str):
+        """辩题切换后触发辩题切换广播和统计更新"""
+        try:
+            from src.core.database import SessionLocal
+            from src.core.websocket_manager import broadcast_debate_change
+
+            # 创建新的数据库会话用于异步任务
+            db = SessionLocal()
+            try:
+                # 获取辩题信息
+                debate = db.query(Debate).filter(
+                    Debate.id == debate_id).first()
+                if debate:
+                    # 构建辩题数据
+                    debate_data = {
+                        "id": str(debate.id),
+                        "title": str(debate.title),
+                        "proDescription": str(getattr(debate, 'pro_description', '') or ''),
+                        "conDescription": str(getattr(debate, 'con_description', '') or ''),
+                        "background": str(getattr(debate, 'background', '') or ''),
+                        "status": str(debate.status.value) if hasattr(debate.status, 'value') else str(debate.status),
+                        "order": debate.order,
+                        "activityId": str(debate.activity_id)
+                    }
+
+                    # 广播辩题切换事件
+                    await broadcast_debate_change(activity_id, debate_data)
+
+                    # 然后触发统计更新
+                    from src.services.statistics_service import get_statistics_service
+                    stats_service = get_statistics_service(db)
+                    await stats_service.update_statistics_cache(activity_id, debate_id)
+
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[ERROR] 触发辩题切换广播失败: {e}")
 
     async def _trigger_statistics_update_after_status_change(self, activity_id: str, debate_id: str):
         """辩题状态更新后触发统计更新和 WebSocket 广播"""

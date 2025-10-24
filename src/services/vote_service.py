@@ -23,8 +23,8 @@ from src.models.debate import Debate
 from src.models.vote import Participant, Vote, VoteHistory
 from src.schemas.debate import DebateStatus
 from src.schemas.vote import (ActivityInfo, ParticipantInfo, ParticipantResponse,
-                              ParticipantVoteStatus, VotePosition, VoteRequest,
-                              VoteStats)
+                              ParticipantVoteStatus, VotePosition, VoteRequest)
+from src.schemas.statistics import VoteStats
 
 
 class VoteService:
@@ -432,80 +432,12 @@ class VoteService:
             )
 
     def get_debate_results(self, debate_id: str) -> VoteStats:
-        """获取辩题的投票统计结果（从Redis，带缓存）"""
+        """获取辩题的投票统计结果（从数据库，使用完整统计逻辑）"""
+        # 使用statistics_service的_get_vote_results方法获取完整统计
+        from src.services.statistics_service import get_statistics_service
 
-        # 尝试从缓存获取
-        cache_key = f"debate:{debate_id}:results"
-        cached_results = self.redis.get(cache_key)  # type: ignore
-        if cached_results:
-            cached_data = json.loads(str(cached_results))
-            return VoteStats(**cached_data)
-
-        # 验证辩题
-        debate = self.db.query(Debate).filter(Debate.id == debate_id).first()
-        if not debate:
-            raise HTTPException(status_code=404, detail="辩题不存在")
-
-        # 从Redis统计 (cast to int to satisfy type checker for clients that annotate SCARD as awaitable)
-        total_votes = int(cast(int, self.redis.scard(
-            self._debate_votes_key(debate_id))))  # type: ignore
-        pro_votes = int(cast(int, self.redis.scard(
-            self._debate_position_key(debate_id, "pro"))))  # type: ignore
-        con_votes = int(cast(int, self.redis.scard(
-            self._debate_position_key(debate_id, "con"))))  # type: ignore
-        abstain_votes = int(cast(int, self.redis.scard(
-            self._debate_position_key(debate_id, "abstain"))))  # type: ignore
-
-        # 计算百分比
-        pro_percentage = (pro_votes / total_votes *
-                          100) if total_votes > 0 else 0
-        con_percentage = (con_votes / total_votes *
-                          100) if total_votes > 0 else 0
-        abstain_percentage = (abstain_votes / total_votes *
-                              100) if total_votes > 0 else 0
-
-        # 确定获胜方
-        winner = None
-        if pro_votes > con_votes:
-            winner = "pro"
-        elif con_votes > pro_votes:
-            winner = "con"
-        else:
-            winner = "tie"
-
-        # 检查是否锁定
-        debate_status = str(debate.status)
-        is_locked = debate_status == "ended"
-        locked_at = getattr(debate, 'updated_at', None) if is_locked else None
-
-        results = VoteStats(
-            debateId=debate_id,
-            totalVotes=total_votes,
-            proVotes=pro_votes,
-            proPreviousVotes=0,  # TODO: Implement previous votes tracking
-            proToConVotes=0,     # TODO: Implement swing votes tracking
-            conVotes=con_votes,
-            conPreviousVotes=0,  # TODO: Implement previous votes tracking
-            conToProVotes=0,     # TODO: Implement swing votes tracking
-            abstainVotes=abstain_votes,
-            abstainPreviousVotes=0,  # TODO: Implement previous votes tracking
-            abstainToProVotes=0,     # TODO: Implement swing votes tracking
-            abstainToConVotes=0,     # TODO: Implement swing votes tracking
-            proScore=round(pro_percentage, 2),
-            conScore=round(con_percentage, 2),
-            abstainPercentage=round(abstain_percentage, 2),
-            proPercentage=round(pro_percentage, 2),
-            conPercentage=round(con_percentage, 2),
-            winner=winner,
-            isLocked=is_locked,
-            lockedAt=locked_at
-        )
-
-        # 缓存结果（10秒）
-        self.redis.setex(cache_key, 10, json.dumps(
-            results.__dict__, default=str))
-
-        return results
+        stats_service = get_statistics_service(self.db)
+        return stats_service._get_vote_results(debate_id)
 
     def clear_debate_votes(self, debate_id: str) -> Dict[str, Any]:
         """清空辩题的所有投票"""

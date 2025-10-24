@@ -256,57 +256,39 @@ class StatisticsService:
             "activityName": str(activity.name),
             "activityStatus": str(activity.status.value) if hasattr(activity.status, 'value') else str(activity.status),
             "currentDebate": current_debate,
-            "currentDebateStats": current_debate_stats,
-            "realTimeStats": {
-                "totalParticipants": total_participants,
-                "checkedInParticipants": checked_in_participants,
-                "onlineParticipants": online_participants,
-                "totalVotes": total_votes,
-                "voteRate": vote_rate
-            },
+            "voteStats": current_debate_stats,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     async def _get_debate_vote_stats_from_redis(self, debate_id: str) -> Dict[str, Any]:
-        """获取辩题的投票统计（从Redis或数据库）"""
-        # 统计各立场的票数
-        vote_counts = self.db.query(
-            Vote.position,
-            func.count(Vote.id).label('count')
-        ).filter(Vote.debate_id == debate_id).group_by(Vote.position).all()
-
-        pro_votes = 0
-        con_votes = 0
-        abstain_votes = 0
-
-        for position, count in vote_counts:
-            if position == 'pro':
-                pro_votes = count
-            elif position == 'con':
-                con_votes = count
-            elif position == 'abstain':
-                abstain_votes = count
-
-        total_votes = pro_votes + con_votes + abstain_votes
-
-        # 计算百分比
-        pro_percentage = round(pro_votes / total_votes *
-                               100, 2) if total_votes > 0 else 0.0
-        con_percentage = round(con_votes / total_votes *
-                               100, 2) if total_votes > 0 else 0.0
-        abstain_percentage = round(
-            abstain_votes / total_votes * 100, 2) if total_votes > 0 else 0.0
-
-        return {
-            "debateId": debate_id,
-            "proVotes": pro_votes,
-            "conVotes": con_votes,
-            "abstainVotes": abstain_votes,
-            "totalVotes": total_votes,
-            "proPercentage": pro_percentage,
-            "conPercentage": con_percentage,
-            "abstainPercentage": abstain_percentage
-        }
+        """获取辩题的投票统计（使用完整的VoteStats）"""
+        try:
+            # 使用_get_vote_results获取完整的投票统计
+            vote_stats = self._get_vote_results(debate_id)
+            return vote_stats.model_dump(by_alias=True)
+        except Exception as e:
+            print(f"[ERROR] 获取辩题投票统计失败: {e}")
+            # 返回空的统计数据
+            return {
+                "debateId": debate_id,
+                "totalVotes": 0,
+                "proVotes": 0,
+                "conVotes": 0,
+                "abstainVotes": 0,
+                "proPreviousVotes": 0,
+                "conPreviousVotes": 0,
+                "abstainPreviousVotes": 0,
+                "proToConVotes": 0,
+                "conToProVotes": 0,
+                "abstainToProVotes": 0,
+                "abstainToConVotes": 0,
+                "proScore": 0.0,
+                "conScore": 0.0,
+                "abstainPercentage": 0.0,
+                "winner": None,
+                "isLocked": False,
+                "lockedAt": None
+            }
 
     async def _load_debate_stats_from_db(self, debate_id: str) -> Dict[str, Any]:
         """从数据库加载辩题统计"""

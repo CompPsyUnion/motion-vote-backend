@@ -40,12 +40,15 @@ class ParticipantResponse(ParticipantBase):
 
 class ParticipantEnter(BaseModel):
     # 方式1: 提供 activity_id 和 participant_code
-    activity_id: Optional[str] = Field(None, alias="activityId", description="活动ID")
-    participant_code: Optional[str] = Field(None, alias="participantCode", description="参与者编号")
-    
+    activity_id: Optional[str] = Field(
+        None, alias="activityId", description="活动ID")
+    participant_code: Optional[str] = Field(
+        None, alias="participantCode", description="参与者编号")
+
     # 方式2: 直接提供 participant_id（推荐）
-    participant_id: Optional[str] = Field(None, alias="participantId", description="参与者ID")
-    
+    participant_id: Optional[str] = Field(
+        None, alias="participantId", description="参与者ID")
+
     device_fingerprint: Optional[str] = Field(
         None, alias="deviceFingerprint", description="设备指纹")
 
@@ -91,8 +94,7 @@ class ParticipantVoteStatus(BaseModel):
 
 
 class VoteStats(BaseModel):
-    debate_id: Optional[str] = Field(
-        None, alias="debateId", description="辩题ID")
+    debate_id: str = Field(..., alias="debateId", description="辩题ID")
     total_votes: int = Field(default=0, alias="totalVotes", description="总投票数")
     pro_votes: int = Field(default=0, alias="proVotes", description="正方最终票数")
     pro_previous_votes: int = Field(
@@ -116,10 +118,6 @@ class VoteStats(BaseModel):
     con_score: float = Field(default=0.0, alias="conScore", description="反方分数")
     abstain_percentage: float = Field(
         default=0.0, alias="abstainPercentage", description="弃权率")
-    pro_percentage: float = Field(
-        default=0.0, alias="proPercentage", description="正方得票率")
-    con_percentage: float = Field(
-        default=0.0, alias="conPercentage", description="反方得票率")
     winner: Optional[str] = Field(None, description="获胜方")
     is_locked: bool = Field(
         default=False, alias="isLocked", description="结果是否已锁定")

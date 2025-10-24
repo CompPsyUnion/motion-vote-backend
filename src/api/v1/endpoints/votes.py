@@ -44,7 +44,7 @@ async def participant_enter_by_id(
     db: Session = Depends(get_db)
 ):
     """参与者通过 participantID 直接进入活动（不需要认证）"""
-    from src.models.activity import Participant
+    from src.models.vote import Participant
     from fastapi import HTTPException
     
     participant_id = request_data.get('participant_id') or request_data.get('participantId')

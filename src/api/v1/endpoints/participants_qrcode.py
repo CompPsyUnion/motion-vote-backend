@@ -83,77 +83,9 @@ async def export_participants_qrcode(
             if not isinstance(img, Image.Image):
                 img = img.convert('RGB')
 
-            # 在图片下方添加参与者信息文本
-            # 创建一个更大的画布来容纳二维码和文本
-            qr_width, qr_height = img.size
-            text_height = 120  # 大幅增加文本区域高度
-            canvas = Image.new(
-                'RGB', (qr_width, qr_height + text_height), 'white')
-            canvas.paste(img, (0, 0))
-
-            # 绘制文本 - 使用更大的字体尺寸
-            draw = ImageDraw.Draw(canvas)
-            
-            # 准备文本内容
-            text = f"编号: {participant.code}"
-            if participant.name:
-                text += f" | {participant.name}"
-
-            # 尝试多种字体，确保找到可用的大字体
-            font = None
-            font_size = 48  # 起始字体大小
-            font_paths = [
-                "arial.ttf",
-                "Arial.ttf",
-                "C:/Windows/Fonts/arial.ttf",
-                "C:/Windows/Fonts/Arial.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/System/Library/Fonts/Helvetica.ttc"
-            ]
-            
-            for font_path in font_paths:
-                try:
-                    font = ImageFont.truetype(font_path, font_size)
-                    break
-                except:
-                    continue
-            
-            # 如果找不到字体文件，使用PIL的默认字体但加粗渲染
-            if font is None:
-                font = ImageFont.load_default()
-                # 使用默认字体时，多次绘制文本以产生加粗效果
-                bbox = draw.textbbox((0, 0), text, font=font)
-                text_width = bbox[2] - bbox[0]
-                text_height_actual = bbox[3] - bbox[1]
-                text_x = (qr_width - text_width) // 2
-                text_y = qr_height + (text_height - text_height_actual) // 2
-                
-                # 多次绘制以加粗
-                for offset_x in range(-2, 3):
-                    for offset_y in range(-2, 3):
-                        draw.text((text_x + offset_x, text_y + offset_y), text, fill='black', font=font)
-            else:
-                # 使用TrueType字体正常绘制
-                bbox = draw.textbbox((0, 0), text, font=font)
-                text_width = bbox[2] - bbox[0]
-                text_height_actual = bbox[3] - bbox[1]
-                
-                # 如果文本太宽，尝试减小字体直到合适
-                while text_width > qr_width - 20 and font_size > 20:
-                    font_size -= 2
-                    font = ImageFont.truetype(font_path, font_size)
-                    bbox = draw.textbbox((0, 0), text, font=font)
-                    text_width = bbox[2] - bbox[0]
-                    text_height_actual = bbox[3] - bbox[1]
-                
-                text_x = (qr_width - text_width) // 2
-                text_y = qr_height + (text_height - text_height_actual) // 2
-                
-                draw.text((text_x, text_y), text, fill='black', font=font)
-
-            # 将图片保存到内存
+            # 将图片保存到内存（不添加文字）
             img_buffer = io.BytesIO()
-            canvas.save(img_buffer, format='PNG')
+            img.save(img_buffer, format='PNG')
             img_buffer.seek(0)
 
             # 生成文件名（使用参与者编号和姓名）

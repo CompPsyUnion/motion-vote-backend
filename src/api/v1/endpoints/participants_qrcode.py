@@ -100,7 +100,7 @@ async def export_participants_qrcode(
             # 使用更大的字体，确保宽度与QR码等宽
             try:
                 # 尝试使用更大的字体
-                font = ImageFont.truetype("arial.ttf", 24)  # 从20增加到24
+                font = ImageFont.truetype("arial.ttf", 48)  # 从20增加到24
             except:
                 # 如果没有找到字体，使用默认字体
                 font = ImageFont.load_default()

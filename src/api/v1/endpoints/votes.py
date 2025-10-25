@@ -37,7 +37,7 @@ async def participant_enter(
     
     # 如果提供了 participant_id，自动查找 activity_id 和 participant_code
     if participant_id:
-        participant = db.query(Participant).filter(Participant.id == participant_id).first()
+        participant = db.query(Participant).filter(Participant.code == participant_id).first()
         if not participant:
             raise HTTPException(status_code=404, detail="参与者不存在")
         

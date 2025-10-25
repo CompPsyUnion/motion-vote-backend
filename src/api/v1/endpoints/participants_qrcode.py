@@ -63,8 +63,8 @@ async def export_participants_qrcode(
 
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for idx, participant in enumerate(participants):
-            # 生成参与者入场URL
-            url = f"https://motionvote.ibuduan.com/participant?participantID={participant.id}"
+            # 生成参与者入场URL（使用 participant.code）
+            url = f"https://motionvote.ibuduan.com/participant?participantID={participant.code}"
 
             # 生成二维码
             qr = qrcode.QRCode(
@@ -86,7 +86,7 @@ async def export_participants_qrcode(
             # 在图片下方添加参与者信息文本
             # 创建一个更大的画布来容纳二维码和文本
             qr_width, qr_height = img.size
-            text_height = 60
+            text_height = 80  # 增加文本区域高度
             canvas = Image.new(
                 'RGB', (qr_width, qr_height + text_height), 'white')
             canvas.paste(img, (0, 0))
@@ -97,10 +97,10 @@ async def export_participants_qrcode(
             if participant.name:
                 text += f" | {participant.name}"
 
-            # 使用默认字体
+            # 使用更大的字体，确保宽度与QR码等宽
             try:
-                # 尝试使用较大的字体
-                font = ImageFont.truetype("arial.ttf", 20)
+                # 尝试使用更大的字体
+                font = ImageFont.truetype("arial.ttf", 24)  # 从20增加到24
             except:
                 # 如果没有找到字体，使用默认字体
                 font = ImageFont.load_default()

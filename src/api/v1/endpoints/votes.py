@@ -24,9 +24,10 @@ async def participant_enter(
 ):
     """参与者入场
     
-    支持两种入场方式：
+    支持三种入场方式：
     1. 提供 activity_id 和 participant_code
-    2. 直接提供 participant_id（推荐）
+    2. 直接提供 participant_id（UUID）
+    3. 直接提供 participant_id（编号 code）
     """
     from src.models.vote import Participant
     from fastapi import HTTPException
@@ -37,7 +38,13 @@ async def participant_enter(
     
     # 如果提供了 participant_id，自动查找 activity_id 和 participant_code
     if participant_id:
-        participant = db.query(Participant).filter(Participant.id == participant_id).first()
+        # 先尝试按 code 查找（因为二维码中使用的是 code）
+        participant = db.query(Participant).filter(Participant.code == participant_id).first()
+        
+        # 如果按 code 找不到，再尝试按 id 查找（UUID）
+        if not participant:
+            participant = db.query(Participant).filter(Participant.id == participant_id).first()
+        
         if not participant:
             raise HTTPException(status_code=404, detail="参与者不存在")
         
@@ -66,7 +73,12 @@ async def participant_enter_by_id(
     request_data: dict,
     db: Session = Depends(get_db)
 ):
-    """参与者通过 participantID 直接进入活动（不需要认证）"""
+    """参与者通过 participantID 直接进入活动（不需要认证）
+    
+    支持两种方式：
+    1. participantID = participant.id (UUID)
+    2. participantID = participant.code (编号，如 0001)
+    """
     from src.models.vote import Participant
     from fastapi import HTTPException
     
@@ -76,8 +88,13 @@ async def participant_enter_by_id(
     if not participant_id:
         raise HTTPException(status_code=400, detail="缺少 participant_id 参数")
     
-    # 查找参与者
-    participant = db.query(Participant).filter(Participant.id == participant_id).first()
+    # 先尝试按 code 查找（因为二维码中使用的是 code）
+    participant = db.query(Participant).filter(Participant.code == participant_id).first()
+    
+    # 如果按 code 找不到，再尝试按 id 查找（UUID）
+    if not participant:
+        participant = db.query(Participant).filter(Participant.id == participant_id).first()
+    
     if not participant:
         raise HTTPException(status_code=404, detail="参与者不存在")
     

@@ -64,7 +64,7 @@ async def export_participants_qrcode(
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for idx, participant in enumerate(participants):
             # 生成参与者入场URL
-            url = f"https://vote.hnrobert.space/participant?participantID={participant.id}"
+            url = f"https://motionvote.ibuduan.com/participant?participantID={participant.id}"
 
             # 生成二维码
             qr = qrcode.QRCode(

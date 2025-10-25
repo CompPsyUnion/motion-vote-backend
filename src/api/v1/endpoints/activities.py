@@ -463,6 +463,20 @@ async def export_participants(
     )
 
 
+
+@router.delete("/{activity_id}/participants/{participant_id}", response_model=ApiResponse)
+@router.delete("/{activity_id}/participants/{participant_id}/", response_model=ApiResponse)
+async def delete_participant(
+    activity_id: str,
+    participant_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """删除指定活动下的参与者"""
+    service = ParticipantService(db)
+    service.delete_participant(activity_id=activity_id, participant_id=participant_id, user_id=str(current_user.id))
+    return ApiResponse(message="Participant deleted successfully")
+
 # ==================== Current Debate 当前辩题 ====================
 
 @router.get("/{activity_id}/current-debate", response_model=ApiResponse)

@@ -30,8 +30,14 @@ class ParticipantService:
 
         # 如果提供了user对象，检查是否是管理员
         if user is not None:
-            if str(user.role) == "UserRole.admin":
-                return activity
+            # user.role is an Enum (UserRole), compare to UserRole.admin
+            try:
+                if user.role == UserRole.admin:
+                    return activity
+            except Exception:
+                # Fallback: string comparison in case of different representations
+                if str(user.role).lower() == 'admin':
+                    return activity
 
         # 检查是否是活动拥有者或协作者
         if str(activity.owner_id) != str(user_id):
@@ -686,6 +692,30 @@ class ParticipantService:
                 "name": str(participant.name)
             }
         }
+
+    def delete_participant(self, activity_id: str, participant_id: str, user_id: str) -> None:
+        """删除参与者（仅活动所有者或协作者可执行）"""
+        # 权限检查
+        self._check_activity_permission(activity_id, user_id)
+
+        participant = self.db.query(Participant).filter(
+            Participant.id == participant_id,
+            Participant.activity_id == activity_id
+        ).first()
+
+        if not participant:
+            raise HTTPException(status_code=404, detail="Participant not found")
+
+        # 删除与该参与者关联的投票（如有）以保持数据一致性
+        try:
+            self.db.query(Vote).filter(Vote.participant_id == participant.id).delete(synchronize_session=False)
+        except Exception:
+            # 忽略如果没有 Vote 表或没有关联记录
+            pass
+
+        # 删除参与者
+        self.db.delete(participant)
+        self.db.commit()
 
         # 检查当前辩题的投票状态
         has_voted = False
